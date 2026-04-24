@@ -236,11 +236,6 @@ function App() {
             </button>
           ))}
         </div>
-        <label className="upload-zone">
-          <UploadCloud size={20} />
-          <span>{isUploading ? "Audio..." : "Audio"}</span>
-          <input accept="audio/*" disabled={isUploading} onChange={uploadAudio} type="file" />
-        </label>
       </section>
 
       <section className="score-row">
@@ -267,6 +262,15 @@ function App() {
             placeholder="Mijoz gapini yoki transcriptdan asosiy qismini kiriting..."
             value={message}
           />
+
+          <label className="voice-upload-card">
+            <UploadCloud size={24} />
+            <div>
+              <strong>{isUploading ? "Ovoz yuklanmoqda..." : "Ovoz fayl yuklash"}</strong>
+              <span>MP3, WAV, M4A yoki WEBM faylni STT orqali matnga aylantirish</span>
+            </div>
+            <input accept="audio/*" disabled={isUploading} onChange={uploadAudio} type="file" />
+          </label>
 
           <div className="action-row">
             <button className="secondary-button" disabled={isSummarizing} onClick={analyzeTranscript} type="button">

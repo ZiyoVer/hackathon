@@ -110,7 +110,7 @@ input:disabled {
 
 .scenario-strip {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   align-items: stretch;
   gap: 12px;
   margin: 12px 0;
@@ -167,28 +167,6 @@ input:disabled {
   color: #667270;
   font-size: 12px;
   line-height: 1.35;
-}
-
-.upload-zone {
-  display: grid;
-  place-items: center;
-  gap: 5px;
-  min-width: 94px;
-  min-height: 68px;
-  padding: 8px 12px;
-  border: 1px dashed #9aa8a5;
-  border-radius: 8px;
-  background: #f7fbfa;
-  color: #31403d;
-  font-weight: 800;
-}
-
-.upload-zone input {
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  overflow: hidden;
-  position: absolute;
 }
 
 .score-row {
@@ -274,6 +252,47 @@ input:disabled {
 .signal-input:focus {
   border-color: #0b7d87;
   box-shadow: 0 0 0 3px rgba(11, 125, 135, 0.12);
+}
+
+.voice-upload-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  margin-top: 12px;
+  padding: 13px;
+  border: 1px dashed #0b7d87;
+  border-radius: 8px;
+  background: #eefbfa;
+  color: #193432;
+}
+
+.voice-upload-card svg {
+  color: #0b7d87;
+}
+
+.voice-upload-card div {
+  display: grid;
+  gap: 4px;
+}
+
+.voice-upload-card strong {
+  font-size: 15px;
+}
+
+.voice-upload-card span {
+  color: #596966;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.voice-upload-card input {
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
 }
 
 .action-row {
