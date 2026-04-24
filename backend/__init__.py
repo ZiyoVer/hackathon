@@ -1,0 +1,1 @@
+"""SQB Agent Copilot backend."""
