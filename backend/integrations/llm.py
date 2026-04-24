@@ -9,7 +9,13 @@ import httpx
 from pydantic import ValidationError
 
 from backend.config import Settings
-from backend.schemas import AnalysisResponse, AnalyzeCallRequest, CallSummaryResponse, ComplianceResult
+from backend.schemas import (
+    AnalysisResponse,
+    AnalyzeCallRequest,
+    CallSummaryResponse,
+    ComplianceEvidence,
+    ComplianceResult,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -49,7 +55,7 @@ class LLMAnalyzer:
         )
         try:
             summary = CallSummaryResponse.model_validate(response_payload)
-            return summary.model_copy(update={"compliance": _normalize_compliance(summary.compliance)})
+            return _normalize_call_summary(summary)
         except ValidationError as exc:
             raise LLMError(f"OpenAI summary schema validation failed: {exc}") from exc
 
@@ -125,15 +131,22 @@ def _extract_output_text(payload: dict[str, Any]) -> str:
 
 
 def _normalize_analysis(response: AnalysisResponse) -> AnalysisResponse:
-    script = [line for line in response.agent_script if line.strip()]
+    script = [_sanitize_safe_language(line) for line in response.agent_script if line.strip()]
     if not script:
-        script = [response.suggested_response]
+        script = [_sanitize_safe_language(response.suggested_response)]
 
     return response.model_copy(
         update={
+            "analysis_mode": "openai",
+            "opportunity": _sanitize_safe_language(response.opportunity),
+            "handoff_recommendation": _sanitize_safe_language(response.handoff_recommendation),
+            "suggested_response": _sanitize_safe_language(response.suggested_response),
             "agent_script": script,
+            "closing_line": _sanitize_safe_language(response.closing_line),
+            "next_best_action": _sanitize_safe_language(response.next_best_action),
             "crm_tags": [_slugify_tag(tag) for tag in response.crm_tags if tag.strip()],
             "compliance": _normalize_compliance(response.compliance),
+            "compliance_evidence": [_normalize_evidence(item) for item in response.compliance_evidence],
         }
     )
 
@@ -141,7 +154,49 @@ def _normalize_analysis(response: AnalysisResponse) -> AnalysisResponse:
 def _normalize_compliance(compliance: ComplianceResult) -> ComplianceResult:
     score = max(0, min(100, compliance.score))
     status = "green" if score >= 80 else "yellow" if score >= 60 else "red"
-    return compliance.model_copy(update={"score": score, "status": status})
+    missing_items = list(compliance.missing_items)
+    if score < 60 and not missing_items:
+        missing_items.append("Majburiy disclosure bandlari yetarli ko'rsatilmagan")
+    return compliance.model_copy(
+        update={
+            "score": score,
+            "status": status,
+            "missing_items": missing_items,
+            "suggested_phrases": [_sanitize_safe_language(phrase) for phrase in compliance.suggested_phrases],
+        }
+    )
+
+
+def _normalize_call_summary(summary: CallSummaryResponse) -> CallSummaryResponse:
+    return summary.model_copy(
+        update={
+            "compliance": _normalize_compliance(summary.compliance),
+            "compliance_evidence": [_normalize_evidence(item) for item in summary.compliance_evidence],
+        }
+    )
+
+
+def _normalize_evidence(evidence: ComplianceEvidence) -> ComplianceEvidence:
+    return evidence.model_copy(update={"safer_phrase": _sanitize_safe_language(evidence.safer_phrase)})
+
+
+def _sanitize_safe_language(text: str) -> str:
+    replacements = {
+        "raqobatbardosh shartlarni taqdim etamiz": "shartlarni aniq hisob-kitob qilib solishtirishga yordam beramiz",
+        "raqobatbardosh shartlar": "aniq hisob-kitob qilingan shartlar",
+        "eng qulay shartlarni taqdim etamiz": "mavjud shartlarni aniq tushuntirib beramiz",
+        "eng qulay shartlar": "mavjud shartlar",
+        "eng past": "aniq hisoblangan",
+        "juda past": "aniq hisoblangan",
+        "boshqa banklardan yaxshiroq": "mavjud shartlarni solishtirishga yordam beradigan",
+        "tabriklayman": "tushunarli",
+        "kredit berishimiz mumkin": "kredit arizasini ko'rib chiqishimiz mumkin",
+        "berishimiz mumkin": "ko'rib chiqishimiz mumkin",
+    }
+    sanitized = text
+    for unsafe, safe in replacements.items():
+        sanitized = sanitized.replace(unsafe, safe).replace(unsafe.capitalize(), safe.capitalize())
+    return sanitized
 
 
 def _slugify_tag(tag: str) -> str:
@@ -176,12 +231,19 @@ crm_tags kichik snake_case taglar bo'lsin.
 compliance.score va compliance.status mos bo'lsin: 80-100 green, 60-79 yellow, 0-59 red.
 Bank compliance bo'yicha ehtiyotkor bo'ling: kreditda foiz stavkasi, umumiy to'lov,
 muddat va shaxsiy ma'lumotlar roziligi eslatilishi kerak. JSON schema'dan chetga chiqmang.
+analysis_mode doim "openai" bo'lsin. matched_signals ichida aniqlangan keyword, intent,
+objection va risk signallarini qisqa snake_case yoki prefixli tag sifatida bering.
+compliance_evidence har bir muhim compliance topilmasi uchun timeline elementi bo'lsin.
+product_references mijoz niyatiga mos mahsulot, disclosure yoki jarayon manbalarini bersin.
+complaint, not_trust, competitor_better, high risk yoki qizil compliance bo'lsa escalation_packet to'ldirilsin;
+aks holda escalation_packet null bo'lsin.
 """.strip()
 
 CALL_SUMMARY_SYSTEM_PROMPT = """
 Siz bank call-markaz suhbatini CRM uchun qisqa xulosaga aylantirasiz.
 Faqat o'zbek tilida yozing. Mijoz maqsadi, e'tirozi, keyingi qadam va compliance
-kamchiliklarini aniq ajrating. JSON schema'dan chetga chiqmang.
+kamchiliklarini aniq ajrating. compliance_evidence timeline elementlarini ham qaytaring.
+JSON schema'dan chetga chiqmang.
 """.strip()
 
 COMPLIANCE_SCHEMA = {
@@ -196,10 +258,65 @@ COMPLIANCE_SCHEMA = {
     "required": ["score", "status", "missing_items", "suggested_phrases"],
 }
 
+COMPLIANCE_EVIDENCE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "id": {"type": "string"},
+        "severity": {"type": "string", "enum": ["info", "warning", "critical"]},
+        "status": {"type": "string", "enum": ["passed", "missing", "risky"]},
+        "speaker": {"type": "string", "enum": ["customer", "agent", "system"]},
+        "line_index": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+        "finding": {"type": "string"},
+        "safer_phrase": {"type": "string"},
+        "score_impact": {"type": "integer"},
+    },
+    "required": [
+        "id",
+        "severity",
+        "status",
+        "speaker",
+        "line_index",
+        "finding",
+        "safer_phrase",
+        "score_impact",
+    ],
+}
+
+PRODUCT_REFERENCE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "category": {"type": "string"},
+        "why_it_matters": {"type": "string"},
+        "script_anchor": {"type": "string"},
+        "verified": {"type": "boolean"},
+    },
+    "required": ["id", "title", "category", "why_it_matters", "script_anchor", "verified"],
+}
+
+ESCALATION_PACKET_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "should_escalate": {"type": "boolean"},
+        "urgency": {"type": "string", "enum": ["normal", "attention", "urgent"]},
+        "owner": {"type": "string"},
+        "reason": {"type": "string"},
+        "handoff_note": {"type": "string"},
+        "transcript_excerpt": {"type": "string"},
+    },
+    "required": ["should_escalate", "urgency", "owner", "reason", "handoff_note", "transcript_excerpt"],
+}
+
 ANALYSIS_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
+        "analysis_mode": {"type": "string", "enum": ["rules", "openai"]},
+        "matched_signals": {"type": "array", "items": {"type": "string"}},
         "intent": {
             "type": "string",
             "enum": [
@@ -239,9 +356,14 @@ ANALYSIS_SCHEMA = {
         "next_best_action": {"type": "string"},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "compliance": COMPLIANCE_SCHEMA,
+        "compliance_evidence": {"type": "array", "items": COMPLIANCE_EVIDENCE_SCHEMA},
+        "product_references": {"type": "array", "items": PRODUCT_REFERENCE_SCHEMA},
+        "escalation_packet": {"anyOf": [ESCALATION_PACKET_SCHEMA, {"type": "null"}]},
         "knowledge_refs": {"type": "array", "items": {"type": "string"}},
     },
     "required": [
+        "analysis_mode",
+        "matched_signals",
         "intent",
         "sentiment",
         "objection",
@@ -261,6 +383,9 @@ ANALYSIS_SCHEMA = {
         "next_best_action",
         "confidence",
         "compliance",
+        "compliance_evidence",
+        "product_references",
+        "escalation_packet",
         "knowledge_refs",
     ],
 }
@@ -273,6 +398,7 @@ CALL_SUMMARY_SCHEMA = {
         "crm_note": {"type": "string"},
         "recommended_next_step": {"type": "string"},
         "compliance": COMPLIANCE_SCHEMA,
+        "compliance_evidence": {"type": "array", "items": COMPLIANCE_EVIDENCE_SCHEMA},
     },
-    "required": ["summary", "crm_note", "recommended_next_step", "compliance"],
+    "required": ["summary", "crm_note", "recommended_next_step", "compliance", "compliance_evidence"],
 }

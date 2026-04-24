@@ -22,6 +22,35 @@ Objection = Literal[
 ]
 
 
+class ComplianceEvidence(BaseModel):
+    id: str
+    severity: Literal["info", "warning", "critical"]
+    status: Literal["passed", "missing", "risky"]
+    speaker: Literal["customer", "agent", "system"]
+    line_index: int | None
+    finding: str
+    safer_phrase: str
+    score_impact: int
+
+
+class ProductReference(BaseModel):
+    id: str
+    title: str
+    category: str
+    why_it_matters: str
+    script_anchor: str
+    verified: bool
+
+
+class EscalationPacket(BaseModel):
+    should_escalate: bool
+    urgency: Literal["normal", "attention", "urgent"]
+    owner: str
+    reason: str
+    handoff_note: str
+    transcript_excerpt: str
+
+
 class AnalyzeMessageRequest(BaseModel):
     message: str = Field(min_length=2, max_length=4000)
 
@@ -43,6 +72,8 @@ class ComplianceResult(BaseModel):
 
 
 class AnalysisResponse(BaseModel):
+    analysis_mode: Literal["rules", "openai"] = "rules"
+    matched_signals: list[str] = Field(default_factory=list)
     intent: Intent
     sentiment: Sentiment
     objection: Objection
@@ -62,6 +93,9 @@ class AnalysisResponse(BaseModel):
     next_best_action: str
     confidence: float = Field(ge=0, le=1)
     compliance: ComplianceResult
+    compliance_evidence: list[ComplianceEvidence] = Field(default_factory=list)
+    product_references: list[ProductReference] = Field(default_factory=list)
+    escalation_packet: EscalationPacket | None = None
     knowledge_refs: list[str]
 
 
@@ -70,6 +104,7 @@ class CallSummaryResponse(BaseModel):
     crm_note: str
     recommended_next_step: str
     compliance: ComplianceResult
+    compliance_evidence: list[ComplianceEvidence] = Field(default_factory=list)
 
 
 class DemoScenario(BaseModel):

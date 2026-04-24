@@ -5,10 +5,14 @@ from typing import Literal
 from backend.schemas import (
     AnalysisResponse,
     AnalyzeCallRequest,
+    CallSummaryResponse,
+    ComplianceEvidence,
     ComplianceResult,
     DemoScenario,
+    EscalationPacket,
     Intent,
     Objection,
+    ProductReference,
     Sentiment,
     SpeakerLine,
 )
@@ -21,6 +25,86 @@ KNOWLEDGE_REFS: dict[Intent, list[str]] = {
     "leasing": ["Lizing arizasi", "Boshlang'ich to'lov", "Garov va hujjatlar"],
     "complaint": ["Shikoyat qabul qilish tartibi", "Murojaat raqami", "Eskalyatsiya"],
     "general_question": ["Umumiy bank xizmatlari", "Filial va aloqa markazi"],
+}
+
+
+PRODUCT_REFERENCES: dict[Intent, list[ProductReference]] = {
+    "credit_request": [
+        ProductReference(
+            id="credit-calculator",
+            title="Kredit kalkulyatori",
+            category="credit",
+            why_it_matters="Mijoz oylik to'lov va umumiy qaytariladigan summani oldindan ko'radi.",
+            script_anchor="Avval taxminiy oylik to'lovni hisoblab ko'rsataman.",
+            verified=True,
+        ),
+        ProductReference(
+            id="credit-disclosure",
+            title="Kredit shartlari disclosure",
+            category="compliance",
+            why_it_matters="Foiz, muddat va umumiy to'lovni shaffof aytish compliance riskini kamaytiradi.",
+            script_anchor="Foiz stavkasi va umumiy qaytariladigan summa bilan oldindan tanishib chiqishingiz zarur.",
+            verified=True,
+        ),
+    ],
+    "card_opening": [
+        ProductReference(
+            id="card-types",
+            title="Humo, Uzcard va xalqaro karta turlari",
+            category="card",
+            why_it_matters="Karta tanlovi mijozning oylik tushumi, onlayn to'lovi yoki xalqaro xaridiga bog'liq.",
+            script_anchor="Kartadan asosan qayerda foydalanishingizni bilsam, sizga mos turini tanlab beraman.",
+            verified=True,
+        ),
+        ProductReference(
+            id="mobile-banking",
+            title="Mobil banking ulash",
+            category="digital",
+            why_it_matters="Karta ochilgandan keyin to'lov va xavfsizlik boshqaruvi uchun kerak.",
+            script_anchor="Karta ochilgach mobil bankingni ulab, onlayn to'lovlarni boshqarish mumkin.",
+            verified=True,
+        ),
+    ],
+    "deposit": [
+        ProductReference(
+            id="deposit-terms",
+            title="Omonat muddatlari",
+            category="deposit",
+            why_it_matters="Muddat va yechish sharti foiz daromadiga bevosita ta'sir qiladi.",
+            script_anchor="Omonat muddati va muddatidan oldin yechish shartlarini solishtirib beraman.",
+            verified=True,
+        )
+    ],
+    "leasing": [
+        ProductReference(
+            id="leasing-application",
+            title="Lizing arizasi shartlari",
+            category="leasing",
+            why_it_matters="Boshlang'ich to'lov, obyekt qiymati va hujjatlar ariza qaroriga ta'sir qiladi.",
+            script_anchor="Lizing obyekti qiymati va boshlang'ich to'lovni aniqlashtiramiz.",
+            verified=True,
+        )
+    ],
+    "complaint": [
+        ProductReference(
+            id="complaint-ticket",
+            title="Murojaat raqami",
+            category="service",
+            why_it_matters="Mijoz shikoyat holatini kuzatishi va keyingi murojaatda raqamni aytishi mumkin.",
+            script_anchor="Tekshiruv natijasini kuzatish uchun murojaat raqamini beramiz.",
+            verified=True,
+        )
+    ],
+    "general_question": [
+        ProductReference(
+            id="service-routing",
+            title="Xizmat bo'yicha yo'naltirish",
+            category="service",
+            why_it_matters="Ehtiyoj aniqlangandan keyin mijoz mos mahsulot yoki mutaxassisga yo'naltiriladi.",
+            script_anchor="Qaysi xizmat bo'yicha maslahat kerakligini aniqlashtirsak, mos yechimni taklif qilaman.",
+            verified=False,
+        )
+    ],
 }
 
 
@@ -70,15 +154,21 @@ def analyze_message(message: str) -> AnalysisResponse:
     objection = _detect_objection(normalized)
     sentiment = _detect_sentiment(normalized, objection)
     compliance = _build_compliance(intent, objection, agent_text="")
+    risk_level = _risk_level(sentiment, objection)
+    priority = _priority(sentiment, objection)
+    matched_signals = _matched_signals(normalized, intent, objection, sentiment)
+    compliance_evidence = _build_compliance_evidence(intent, objection, "", None)
 
     return AnalysisResponse(
+        analysis_mode="rules",
+        matched_signals=matched_signals,
         intent=intent,
         sentiment=sentiment,
         objection=objection,
         customer_summary=_customer_summary(intent, objection, message),
         customer_needs=_customer_needs(intent, objection),
-        risk_level=_risk_level(sentiment, objection),
-        priority=_priority(sentiment, objection),
+        risk_level=risk_level,
+        priority=priority,
         lead_temperature=_lead_temperature(intent, objection),
         opportunity=_opportunity(intent, objection),
         handoff_recommendation=_handoff_recommendation(intent, objection),
@@ -91,6 +181,15 @@ def analyze_message(message: str) -> AnalysisResponse:
         next_best_action=_next_best_action(intent, objection),
         confidence=_confidence(intent, objection),
         compliance=compliance,
+        compliance_evidence=compliance_evidence,
+        product_references=_product_references(intent),
+        escalation_packet=_build_escalation_packet(
+            intent=intent,
+            objection=objection,
+            risk_level=risk_level,
+            compliance=compliance,
+            transcript_excerpt=message[:400],
+        ),
         knowledge_refs=KNOWLEDGE_REFS[intent],
     )
 
@@ -100,12 +199,19 @@ def analyze_call(payload: AnalyzeCallRequest) -> CallSummaryResponse:
     agent_text = " ".join(line.text for line in payload.transcript if line.speaker == "agent")
     message_analysis = analyze_message(customer_text or payload.transcript[-1].text)
     compliance = _build_compliance(message_analysis.intent, message_analysis.objection, agent_text)
+    compliance_evidence = _build_compliance_evidence(
+        message_analysis.intent,
+        message_analysis.objection,
+        agent_text,
+        payload.transcript,
+    )
 
     return CallSummaryResponse(
         summary=_summary(message_analysis.intent, message_analysis.objection, customer_text),
         crm_note=_crm_note(message_analysis.intent, message_analysis.objection),
         recommended_next_step=message_analysis.next_best_action,
         compliance=compliance,
+        compliance_evidence=compliance_evidence,
     )
 
 
@@ -427,6 +533,249 @@ def _build_compliance(intent: Intent, objection: Objection, agent_text: str) -> 
         missing_items=missing_items,
         suggested_phrases=suggested_phrases,
     )
+
+
+def _build_compliance_evidence(
+    intent: Intent,
+    objection: Objection,
+    agent_text: str,
+    transcript: list[SpeakerLine] | None,
+) -> list[ComplianceEvidence]:
+    normalized_agent = _normalize(agent_text)
+    evidence: list[ComplianceEvidence] = []
+
+    checks = _compliance_checks(intent)
+    for index, check in enumerate(checks, start=1):
+        missing = not agent_text or not any(keyword in normalized_agent for keyword in check["keywords"])
+        evidence.append(
+            ComplianceEvidence(
+                id=f"{intent}-{index}",
+                severity=check["severity"],
+                status="missing" if missing else "passed",
+                speaker="agent" if agent_text else "system",
+                line_index=_find_line_index(transcript, "agent", check["keywords"]) if not missing else None,
+                finding=check["missing"] if missing else check["passed"],
+                safer_phrase=check["phrase"],
+                score_impact=check["impact"] if missing else 0,
+            )
+        )
+
+    if objection != "none":
+        risky_line = _find_line_index(transcript, "customer", _objection_keywords(objection))
+        evidence.append(
+            ComplianceEvidence(
+                id=f"objection-{objection}",
+                severity="warning",
+                status="risky",
+                speaker="customer",
+                line_index=risky_line,
+                finding="Mijoz e'tirozi qayd etildi va agentdan ehtiyotkor, dalilga asoslangan javob talab qiladi.",
+                safer_phrase="Xavotiringizni tushunaman, shartlarni aniq hisob-kitob bilan solishtirib ko'raylik.",
+                score_impact=8,
+            )
+        )
+
+    return evidence
+
+
+def _compliance_checks(intent: Intent) -> list[dict[str, object]]:
+    checks: dict[Intent, list[dict[str, object]]] = {
+        "credit_request": [
+            {
+                "missing": "Foiz stavkasi va kredit muddati tushuntirilmadi",
+                "passed": "Foiz stavkasi yoki kredit muddati agent javobida tilga olindi",
+                "phrase": "Kredit foiz stavkasi, muddat va mijoz profiliga qarab belgilanadi.",
+                "keywords": ["foiz", "stavka", "muddat"],
+                "severity": "critical",
+                "impact": 10,
+            },
+            {
+                "missing": "Umumiy qaytariladigan summa aytilmadi",
+                "passed": "Umumiy yoki oylik to'lov bo'yicha disclosure bor",
+                "phrase": "Umumiy to'lov summasi va oylik to'lovni oldindan ko'rib chiqishingiz zarur.",
+                "keywords": ["umumiy", "oylik to'lov", "qaytariladigan"],
+                "severity": "critical",
+                "impact": 10,
+            },
+            {
+                "missing": "Shaxsiy ma'lumotlar roziligi eslatilmadi",
+                "passed": "Shaxsiy ma'lumotlar roziligi agent javobida eslatildi",
+                "phrase": "Arizani ko'rib chiqish uchun shaxsiy ma'lumotlaringizga rozilik kerak bo'ladi.",
+                "keywords": ["rozilik", "shaxsiy"],
+                "severity": "warning",
+                "impact": 8,
+            },
+        ],
+        "card_opening": [
+            {
+                "missing": "Karta turi yoki foydalanish maqsadi aniqlashtirilmadi",
+                "passed": "Karta turi yoki foydalanish maqsadi aniqlashtirildi",
+                "phrase": "Kartadan oylik, onlayn to'lov yoki xalqaro xarid uchun foydalanishingizni aniqlashtirsak.",
+                "keywords": ["karta", "foydalan", "humo", "uzcard", "visa", "mastercard"],
+                "severity": "info",
+                "impact": 5,
+            },
+            {
+                "missing": "Karta xavfsizligi yoki mobil banking eslatilmadi",
+                "passed": "Mobil banking yoki karta xavfsizligi eslatildi",
+                "phrase": "Karta ochilgach mobil banking va xavfsizlik sozlamalarini ulab beramiz.",
+                "keywords": ["mobil", "xavfsiz", "sms", "pin"],
+                "severity": "info",
+                "impact": 5,
+            },
+        ],
+        "deposit": [
+            {
+                "missing": "Omonat muddati va foiz hisoblanishi tushuntirilmadi",
+                "passed": "Omonat muddati yoki foiz hisoblanishi tilga olindi",
+                "phrase": "Omonat muddati, foiz hisoblanishi va to'ldirish imkoniyatini solishtirib beraman.",
+                "keywords": ["muddat", "foiz", "omonat", "depozit"],
+                "severity": "warning",
+                "impact": 6,
+            },
+            {
+                "missing": "Muddatidan oldin yechish sharti aytilmadi",
+                "passed": "Muddatidan oldin yechish sharti eslatildi",
+                "phrase": "Pulni muddatidan oldin yechsangiz, foiz daromadiga ta'sirini oldindan ko'rib chiqamiz.",
+                "keywords": ["oldin yech", "muddatidan oldin", "yechish"],
+                "severity": "warning",
+                "impact": 6,
+            },
+        ],
+        "leasing": [
+            {
+                "missing": "Boshlang'ich to'lov yoki obyekt qiymati aniqlashtirilmadi",
+                "passed": "Boshlang'ich to'lov yoki obyekt qiymati aniqlashtirildi",
+                "phrase": "Lizing obyekti qiymati, boshlang'ich to'lov va muddatni birga hisoblab chiqamiz.",
+                "keywords": ["boshlang'ich", "obyekt", "qiymat", "lizing"],
+                "severity": "warning",
+                "impact": 6,
+            },
+            {
+                "missing": "Lizing hujjatlari yoki garov talabi eslatilmadi",
+                "passed": "Hujjatlar yoki garov talabi tilga olindi",
+                "phrase": "Ariza uchun kerakli hujjatlar va garov talabi bo'lsa, oldindan tushuntirib beraman.",
+                "keywords": ["hujjat", "garov"],
+                "severity": "info",
+                "impact": 5,
+            },
+        ],
+        "complaint": [
+            {
+                "missing": "Shikoyat ro'yxatga olinishi yoki murojaat raqami aytilmadi",
+                "passed": "Murojaat raqami yoki ro'yxatga olish jarayoni aytildi",
+                "phrase": "Murojaatingizni ro'yxatdan o'tkazib, kuzatish uchun murojaat raqamini beramiz.",
+                "keywords": ["murojaat", "raqam", "ro'yxat"],
+                "severity": "critical",
+                "impact": 10,
+            },
+            {
+                "missing": "Zarur holatda supervisor eskalyatsiyasi aytilmadi",
+                "passed": "Eskalyatsiya yoki supervisor nazorati eslatildi",
+                "phrase": "Masala tezkor yoki takroriy bo'lsa, supervisor nazoratiga o'tkazaman.",
+                "keywords": ["supervisor", "eskalyatsiya", "nazorat"],
+                "severity": "warning",
+                "impact": 8,
+            },
+        ],
+        "general_question": [],
+    }
+    return checks[intent]
+
+
+def _find_line_index(transcript: list[SpeakerLine] | None, speaker: Literal["customer", "agent"], keywords: object) -> int | None:
+    if transcript is None or not isinstance(keywords, list):
+        return None
+    keyword_values = [keyword for keyword in keywords if isinstance(keyword, str)]
+    for index, line in enumerate(transcript):
+        if line.speaker == speaker and _contains(_normalize(line.text), keyword_values):
+            return index
+    return None
+
+
+def _product_references(intent: Intent) -> list[ProductReference]:
+    return list(PRODUCT_REFERENCES[intent])
+
+
+def _build_escalation_packet(
+    *,
+    intent: Intent,
+    objection: Objection,
+    risk_level: Literal["low", "medium", "high"],
+    compliance: ComplianceResult,
+    transcript_excerpt: str,
+) -> EscalationPacket | None:
+    should_escalate = (
+        intent == "complaint"
+        or objection in {"not_trust", "competitor_better"}
+        or risk_level == "high"
+        or compliance.status == "red"
+    )
+    if not should_escalate:
+        return None
+
+    urgency: Literal["normal", "attention", "urgent"] = "urgent" if risk_level == "high" or compliance.status == "red" else "attention"
+    owner = "Supervisor" if intent == "complaint" or compliance.status == "red" else "Senior agent"
+    reason = _escalation_reason(intent, objection, risk_level, compliance)
+    return EscalationPacket(
+        should_escalate=True,
+        urgency=urgency,
+        owner=owner,
+        reason=reason,
+        handoff_note=f"{owner} mijozga javobdan oldin holatni ko'rib chiqsin: {reason}",
+        transcript_excerpt=transcript_excerpt,
+    )
+
+
+def _escalation_reason(
+    intent: Intent,
+    objection: Objection,
+    risk_level: Literal["low", "medium", "high"],
+    compliance: ComplianceResult,
+) -> str:
+    if compliance.status == "red":
+        return "Compliance holati qizil, majburiy disclosure yoki xavfsiz iboralar yetishmayapti."
+    if intent == "complaint":
+        return "Mijoz shikoyat yoki xizmat muammosi bilan murojaat qilgan."
+    if objection == "not_trust":
+        return "Mijoz ishonchsizlik bildirdi, ehtiyotkor va shaffof izoh kerak."
+    if objection == "competitor_better":
+        return "Mijoz raqobatchi taklifini yaxshiroq deb baholamoqda."
+    if risk_level == "high":
+        return "Risk darajasi yuqori deb baholandi."
+    return "Qo'shimcha nazorat talab qilinadi."
+
+
+def _matched_signals(text: str, intent: Intent, objection: Objection, sentiment: Sentiment) -> list[str]:
+    signals = [f"intent:{intent}", f"sentiment:{sentiment}"]
+    if objection != "none":
+        signals.append(f"objection:{objection}")
+
+    keyword_groups = {
+        "keyword:kredit": ["kredit", "qarz", "foiz", "oylik to'lov"],
+        "keyword:karta": ["karta", "plastik", "humo", "uzcard", "visa", "mastercard"],
+        "keyword:omonat": ["omonat", "depozit", "jamg'arma"],
+        "keyword:lizing": ["lizing", "avtomobil", "texnika"],
+        "keyword:shikoyat": ["shikoyat", "muammo", "norozi", "bloklandi"],
+        "keyword:raqobatchi": ["boshqa bank", "raqobatchi"],
+        "keyword:ishonch": ["ishonmayman", "ishonch yo'q", "xavotir"],
+    }
+    for signal, keywords in keyword_groups.items():
+        if _contains(text, keywords):
+            signals.append(signal)
+    return signals
+
+
+def _objection_keywords(objection: Objection) -> list[str]:
+    keywords: dict[Objection, list[str]] = {
+        "interest_rate_expensive": ["qimmat", "foizi qimmat", "stavka yuqori", "foiz ko'p"],
+        "need_to_think": ["o'ylab", "keyin qaror", "maslahatlashib"],
+        "competitor_better": ["boshqa bank", "raqobatchi", "u bankda yaxshi"],
+        "not_trust": ["ishonmayman", "ishonch yo'q", "xavotirdaman"],
+        "call_later": ["keyinroq", "ertaga", "qayta qo'ng'iroq", "call later"],
+        "none": [],
+    }
+    return keywords[objection]
 
 
 def _summary(intent: Intent, objection: Objection, customer_text: str) -> str:

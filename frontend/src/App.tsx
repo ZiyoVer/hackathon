@@ -5,17 +5,11 @@ import {
   Copy,
   FileAudio,
   FileText,
-  Flag,
-  Gauge,
-  ListChecks,
   Mic,
-  PhoneCall,
   PlayCircle,
   Send,
   ShieldCheck,
-  Target,
   UploadCloud,
-  UserRound
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
@@ -24,6 +18,7 @@ import type {
   AnalysisResponse,
   AudioTranscriptionResponse,
   CallSummaryResponse,
+  ComplianceEvidence,
   ComplianceResult,
   ComplianceStatus,
   DemoScenario,
@@ -85,11 +80,14 @@ const temperatureLabels: Record<AnalysisResponse["lead_temperature"], string> = 
   hot: "Issiq"
 };
 
+type SupportTab = "script" | "compliance" | "crm" | "transcript";
+
 function App() {
   const [message, setMessage] = useState(FALLBACK_MESSAGE);
   const [transcript, setTranscript] = useState<SpeakerLine[]>(DEFAULT_TRANSCRIPT);
   const [scenarios, setScenarios] = useState<DemoScenario[]>([]);
   const [activeScenarioId, setActiveScenarioId] = useState<string>("");
+  const [activeSupportTab, setActiveSupportTab] = useState<SupportTab>("script");
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
   const [summary, setSummary] = useState<CallSummaryResponse | null>(null);
   const [audioResult, setAudioResult] = useState<AudioTranscriptionResponse | null>(null);
@@ -112,18 +110,23 @@ function App() {
       .catch((caught: unknown) => setError(getErrorMessage(caught)));
   }, []);
 
-  const scoreCards = useMemo(() => {
+  const signalItems = useMemo(() => {
     const complianceScore = summary?.compliance.score ?? analysis?.compliance.score ?? 0;
     return [
-      { label: "Intent", value: analysis ? intentLabels[analysis.intent] : "Aniqlanmagan", icon: Target },
-      { label: "Priority", value: analysis ? priorityLabels[analysis.priority] : "Aniqlanmagan", icon: Flag },
-      { label: "Lead", value: analysis ? temperatureLabels[analysis.lead_temperature] : "Aniqlanmagan", icon: Gauge },
-      { label: "Compliance", value: complianceScore ? `${complianceScore}%` : "0%", icon: ShieldCheck }
+      { label: "Intent", value: analysis ? intentLabels[analysis.intent] : "Aniqlanmagan" },
+      { label: "Priority", value: analysis ? priorityLabels[analysis.priority] : "Aniqlanmagan" },
+      { label: "Lead", value: analysis ? temperatureLabels[analysis.lead_temperature] : "Aniqlanmagan" },
+      { label: "Compliance", value: complianceScore ? `${complianceScore}%` : "0%" },
+      { label: "Mode", value: analysis ? analysis.analysis_mode : "rules" }
     ];
   }, [analysis, summary]);
 
   const scriptLines = analysis?.agent_script?.length ? analysis.agent_script : analysis ? [analysis.suggested_response] : [];
   const compliance = summary?.compliance ?? analysis?.compliance ?? null;
+  const complianceEvidence = summary?.compliance_evidence?.length
+    ? summary.compliance_evidence
+    : analysis?.compliance_evidence ?? [];
+  const primaryScriptLine = scriptLines[0] ?? "";
 
   const copyBrief = async () => {
     if (!analysis) {
@@ -137,7 +140,8 @@ function App() {
       `Priority: ${priorityLabels[analysis.priority]}`,
       `Next step: ${analysis.next_best_action}`,
       `Closing: ${analysis.closing_line}`,
-      `Tags: ${analysis.crm_tags.join(", ")}`
+      `Tags: ${analysis.crm_tags.join(", ")}`,
+      analysis.escalation_packet?.should_escalate ? `Escalation: ${analysis.escalation_packet.handoff_note}` : ""
     ].join("\n");
 
     try {
@@ -215,6 +219,13 @@ function App() {
     void analyzeText(scenario.customer_message);
   };
 
+  const handleScenarioChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const scenario = scenarios.find((item) => item.id === event.target.value);
+    if (scenario) {
+      selectScenario(scenario);
+    }
+  };
+
   const uploadAudio = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -258,41 +269,22 @@ function App() {
         </div>
       )}
 
-      <section className="scenario-strip">
-        <div className="strip-title">
-          <PhoneCall size={18} />
-          <span>Demo holatlar</span>
-        </div>
-        <div className="scenario-list">
-          {scenarios.map((scenario) => (
-            <button
-              className={scenario.id === activeScenarioId ? "scenario-button active" : "scenario-button"}
-              key={scenario.id}
-              onClick={() => selectScenario(scenario)}
-              type="button"
-            >
-              <strong>{scenario.title}</strong>
-              <span>{scenario.description}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="score-row">
-        {scoreCards.map((card) => (
-          <div className="score-card" key={card.label}>
-            <card.icon size={18} />
-            <span>{card.label}</span>
-            <strong>{card.value}</strong>
-          </div>
-        ))}
-      </section>
-
       <section className="assist-grid">
         <section className="panel input-panel">
           <div className="panel-heading">
             <Mic size={20} />
             <h2>Mijoz signali</h2>
+          </div>
+
+          <div className="input-toolbar">
+            <label htmlFor="scenario-select">Demo holat</label>
+            <select id="scenario-select" onChange={handleScenarioChange} value={activeScenarioId}>
+              {scenarios.map((scenario) => (
+                <option key={scenario.id} value={scenario.id}>
+                  {scenario.title}
+                </option>
+              ))}
+            </select>
           </div>
 
           <textarea
@@ -332,30 +324,24 @@ function App() {
               </div>
             </div>
           )}
-
-          <div className="transcript-box">
-            <div className="section-label">Suhbat matni</div>
-            {transcript.map((line, index) => (
-              <div className="transcript-line" key={`${line.speaker}-${index}`}>
-                <span>{line.speaker === "customer" ? "Mijoz" : "Agent"}</span>
-                <p>{line.text}</p>
-              </div>
-            ))}
-          </div>
         </section>
 
         <section className="panel analysis-panel">
-          <div className="panel-heading">
-            <UserRound size={20} />
-            <h2>Mijoz tahlili</h2>
-          </div>
-
           {analysis ? (
             <>
-              <div className="badge-grid">
-                <Badge label="Intent" tone="blue" value={intentLabels[analysis.intent]} />
-                <Badge label="Sentiment" tone={analysis.sentiment} value={sentimentLabels[analysis.sentiment]} />
-                <Badge label="E'tiroz" tone="amber" value={objectionLabels[analysis.objection]} />
+              <div className="decision-hero">
+                <span>Keyingi javob</span>
+                <strong>{primaryScriptLine || analysis.suggested_response}</strong>
+                <p>{analysis.next_best_action}</p>
+              </div>
+
+              <div className="signal-bar" aria-label="Mijoz signallari">
+                {signalItems.map((item) => (
+                  <div key={item.label}>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </div>
+                ))}
               </div>
 
               <div className="analysis-summary">
@@ -363,11 +349,10 @@ function App() {
                 <p>{analysis.customer_summary}</p>
               </div>
 
-              <ListBlock icon={ListChecks} title="Ehtiyojlar" items={analysis.customer_needs} />
-
-              <div className="next-action">
-                <span>Keyingi eng yaxshi qadam</span>
-                <strong>{analysis.next_best_action}</strong>
+              <div className="compact-tags">
+                <Badge label="Sentiment" tone={analysis.sentiment} value={sentimentLabels[analysis.sentiment]} />
+                <Badge label="E'tiroz" tone="amber" value={objectionLabels[analysis.objection]} />
+                <Badge label="Risk" tone={analysis.risk_level === "high" ? "negative" : "blue"} value={riskLabels[analysis.risk_level]} />
               </div>
 
               <div className="opportunity-box">
@@ -375,35 +360,9 @@ function App() {
                 <p>{analysis.opportunity}</p>
               </div>
 
-              <div className="battlecard">
-                <div className="battlecard-head">
-                  <div>
-                    <span>Agent Battlecard</span>
-                    <strong>{priorityLabels[analysis.priority]} holat</strong>
-                  </div>
-                  <button className="copy-button" onClick={() => void copyBrief()} type="button">
-                    <Copy size={15} />
-                    {copied ? "Copied" : "CRM brief"}
-                  </button>
-                </div>
+              <ListBlock icon={ClipboardList} title="Ehtiyojlar" items={analysis.customer_needs} />
 
-                <div className="battlecard-grid">
-                  <div>
-                    <span>Lead</span>
-                    <strong>{temperatureLabels[analysis.lead_temperature]}</strong>
-                  </div>
-                  <div>
-                    <span>Handoff</span>
-                    <strong>{analysis.handoff_recommendation}</strong>
-                  </div>
-                </div>
-
-                <div className="tag-row">
-                  {analysis.crm_tags.map((tag) => (
-                    <span key={tag}>{tag}</span>
-                  ))}
-                </div>
-              </div>
+              <ProductReferenceStrip analysis={analysis} />
             </>
           ) : (
             <div className="empty-state">
@@ -414,61 +373,219 @@ function App() {
         </section>
       </section>
 
-      <section className="support-grid">
-        <section className="panel script-panel">
-          <div className="panel-heading">
-            <ClipboardList size={20} />
-            <h2>Agent script</h2>
+      <section className="panel support-panel">
+        <div className="tab-list" role="tablist" aria-label="Qo'llab-quvvatlash ma'lumotlari">
+          <TabButton active={activeSupportTab === "script"} label="Script" onClick={() => setActiveSupportTab("script")} />
+          <TabButton
+            active={activeSupportTab === "compliance"}
+            label="Compliance"
+            onClick={() => setActiveSupportTab("compliance")}
+          />
+          <TabButton active={activeSupportTab === "crm"} label="CRM" onClick={() => setActiveSupportTab("crm")} />
+          <TabButton
+            active={activeSupportTab === "transcript"}
+            label="Transcript"
+            onClick={() => setActiveSupportTab("transcript")}
+          />
+        </div>
+
+        <div className="tab-panel">
+          {activeSupportTab === "script" && (
+            <ScriptTab
+              analysis={analysis}
+              isSynthesizing={isSynthesizing}
+              onSynthesize={synthesizeSuggestion}
+              scriptLines={scriptLines}
+              ttsResult={ttsResult}
+            />
+          )}
+          {activeSupportTab === "compliance" &&
+            (compliance ? (
+              <CompliancePanel compliance={compliance} evidence={complianceEvidence} />
+            ) : (
+              <EmptyCompliance />
+            ))}
+          {activeSupportTab === "crm" && (
+            <CrmTab analysis={analysis} copied={copied} copyBrief={copyBrief} summary={summary} />
+          )}
+          {activeSupportTab === "transcript" && <TranscriptTab transcript={transcript} />}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ProductReferenceStrip({ analysis }: { analysis: AnalysisResponse }) {
+  const references = analysis.product_references ?? [];
+  const signals = analysis.matched_signals ?? [];
+
+  if (references.length === 0 && signals.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="reference-strip">
+      {references.length > 0 && (
+        <div>
+          <div className="section-label">SQB manbalar</div>
+          <div className="reference-grid">
+            {references.map((reference) => (
+              <article className="reference-card" key={reference.id}>
+                <span>{reference.category}</span>
+                <strong>{reference.title}</strong>
+                <p>{reference.why_it_matters}</p>
+                <small>{reference.verified ? "verified" : "fallback"} | {reference.script_anchor}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {signals.length > 0 && (
+        <div className="matched-signals">
+          <div className="section-label">Matched signals</div>
+          <div className="tag-row">
+            {signals.map((signal) => (
+              <span key={signal}>{signal}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+  return (
+    <button aria-selected={active} className={active ? "tab-button active" : "tab-button"} onClick={onClick} role="tab" type="button">
+      {label}
+    </button>
+  );
+}
+
+function ScriptTab({
+  analysis,
+  isSynthesizing,
+  onSynthesize,
+  scriptLines,
+  ttsResult
+}: {
+  analysis: AnalysisResponse | null;
+  isSynthesizing: boolean;
+  onSynthesize: () => Promise<void>;
+  scriptLines: string[];
+  ttsResult: TtsResponse | null;
+}) {
+  if (scriptLines.length === 0) {
+    return (
+      <div className="empty-state compact">
+        <p>Tahlildan keyin agent aytadigan tayyor gaplar shu yerda chiqadi.</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="script-list">
+        {scriptLines.map((line, index) => (
+          <div className={index === 0 ? "script-line primary" : "script-line"} key={`${line}-${index}`}>
+            <span>{index + 1}</span>
+            <p>{line}</p>
+          </div>
+        ))}
+      </div>
+
+      <button className="icon-button" disabled={isSynthesizing} onClick={() => void onSynthesize()} type="button">
+        <PlayCircle size={17} />
+        {isSynthesizing ? "TTS..." : "Scriptni ovozga aylantirish"}
+      </button>
+
+      {ttsResult && (
+        <div className="tts-output">
+          <span>{ttsResult.message}</span>
+          {ttsResult.audio_url && <audio controls src={ttsResult.audio_url} />}
+        </div>
+      )}
+
+      <ListBlock icon={ClipboardList} title="Aniqlashtiruvchi savollar" items={analysis?.follow_up_questions ?? []} />
+
+      {analysis?.closing_line && (
+        <div className="closing-line">
+          <span>Closing line</span>
+          <strong>{analysis.closing_line}</strong>
+        </div>
+      )}
+
+      <ListBlock icon={AlertTriangle} title="Aytmaslik kerak" items={analysis?.do_not_say ?? []} />
+    </>
+  );
+}
+
+function CrmTab({
+  analysis,
+  copied,
+  copyBrief,
+  summary
+}: {
+  analysis: AnalysisResponse | null;
+  copied: boolean;
+  copyBrief: () => Promise<void>;
+  summary: CallSummaryResponse | null;
+}) {
+  if (!analysis && !summary) {
+    return (
+      <div className="empty-state compact">
+        <p>CRM brief va qo'ng'iroq xulosasi tahlildan keyin chiqadi.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="crm-grid">
+      {analysis && (
+        <div className="battlecard">
+          <div className="battlecard-head">
+            <div>
+              <span>Agent Battlecard</span>
+              <strong>{priorityLabels[analysis.priority]} holat</strong>
+            </div>
+            <button className="copy-button" onClick={() => void copyBrief()} type="button">
+              <Copy size={15} />
+              {copied ? "Copied" : "CRM brief"}
+            </button>
           </div>
 
-          {scriptLines.length > 0 ? (
-            <>
-              <div className="script-list">
-                {scriptLines.map((line, index) => (
-                  <div className="script-line" key={`${line}-${index}`}>
-                    <span>{index + 1}</span>
-                    <p>{line}</p>
-                  </div>
-                ))}
-              </div>
-
-              <button className="icon-button" disabled={isSynthesizing} onClick={synthesizeSuggestion} type="button">
-                <PlayCircle size={17} />
-                {isSynthesizing ? "TTS..." : "Scriptni ovozga aylantirish"}
-              </button>
-
-              {ttsResult && (
-                <div className="tts-output">
-                  <span>{ttsResult.message}</span>
-                  {ttsResult.audio_url && <audio controls src={ttsResult.audio_url} />}
-                </div>
-              )}
-
-              <ListBlock icon={Target} title="Aniqlashtiruvchi savollar" items={analysis?.follow_up_questions ?? []} />
-
-              {analysis?.closing_line && (
-                <div className="closing-line">
-                  <span>Closing line</span>
-                  <strong>{analysis.closing_line}</strong>
-                </div>
-              )}
-
-              <ListBlock icon={AlertTriangle} title="Aytmaslik kerak" items={analysis?.do_not_say ?? []} />
-            </>
-          ) : (
-            <div className="empty-state compact">
-              <p>Tahlildan keyin agent aytadigan tayyor gaplar shu yerda chiqadi.</p>
+          <div className="battlecard-grid">
+            <div>
+              <span>Lead</span>
+              <strong>{temperatureLabels[analysis.lead_temperature]}</strong>
             </div>
-          )}
-        </section>
+            <div>
+              <span>Handoff</span>
+              <strong>{analysis.handoff_recommendation}</strong>
+            </div>
+          </div>
 
-        <section className="panel compliance-panel">
-          {compliance ? <CompliancePanel compliance={compliance} /> : <EmptyCompliance />}
-        </section>
-      </section>
+          <div className="tag-row">
+            {analysis.crm_tags.map((tag) => (
+              <span key={tag}>{tag}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analysis?.escalation_packet?.should_escalate && (
+        <div className="escalation-card">
+          <div className="section-label">Supervisor packet</div>
+          <strong>{analysis.escalation_packet.owner} | {analysis.escalation_packet.urgency}</strong>
+          <p>{analysis.escalation_packet.reason}</p>
+          <p>{analysis.escalation_packet.handoff_note}</p>
+          {analysis.escalation_packet.transcript_excerpt && <small>{analysis.escalation_packet.transcript_excerpt}</small>}
+        </div>
+      )}
 
       {summary && (
-        <section className="summary-band">
+        <div className="summary-card">
           <h2>CRM uchun xulosa</h2>
           <p>{summary.summary}</p>
           <div>
@@ -479,9 +596,22 @@ function App() {
             <span>Keyingi qadam</span>
             <strong>{summary.recommended_next_step}</strong>
           </div>
-        </section>
+        </div>
       )}
-    </main>
+    </div>
+  );
+}
+
+function TranscriptTab({ transcript }: { transcript: SpeakerLine[] }) {
+  return (
+    <div className="transcript-box in-tab">
+      {transcript.map((line, index) => (
+        <div className="transcript-line" key={`${line.speaker}-${index}`}>
+          <span>{line.speaker === "customer" ? "Mijoz" : "Agent"}</span>
+          <p>{line.text}</p>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -522,7 +652,13 @@ function ListBlock({
   );
 }
 
-function CompliancePanel({ compliance }: { compliance: ComplianceResult }) {
+function CompliancePanel({
+  compliance,
+  evidence
+}: {
+  compliance: ComplianceResult;
+  evidence: ComplianceEvidence[];
+}) {
   return (
     <>
       <div className="panel-heading">
@@ -563,6 +699,24 @@ function CompliancePanel({ compliance }: { compliance: ComplianceResult }) {
           <div className="section-label">Majburiy gaplar</div>
           {compliance.suggested_phrases.map((phrase) => (
             <p key={phrase}>{phrase}</p>
+          ))}
+        </div>
+      )}
+
+      {evidence.length > 0 && (
+        <div className="evidence-list">
+          <div className="section-label">Evidence timeline</div>
+          {evidence.map((item) => (
+            <div className={`evidence-item ${item.status}`} key={item.id}>
+              <div>
+                <strong>{item.finding}</strong>
+                <span>
+                  {item.speaker}
+                  {item.line_index !== null ? ` #${item.line_index + 1}` : ""} | {item.severity} | -{item.score_impact}
+                </span>
+              </div>
+              {item.safer_phrase && <p>{item.safer_phrase}</p>}
+            </div>
           ))}
         </div>
       )}

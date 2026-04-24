@@ -30,7 +30,38 @@ export interface ComplianceResult {
   suggested_phrases: string[];
 }
 
+export interface ComplianceEvidence {
+  id: string;
+  severity: "info" | "warning" | "critical";
+  status: "passed" | "missing" | "risky";
+  speaker: "customer" | "agent" | "system";
+  line_index: number | null;
+  finding: string;
+  safer_phrase: string;
+  score_impact: number;
+}
+
+export interface ProductReference {
+  id: string;
+  title: string;
+  category: string;
+  why_it_matters: string;
+  script_anchor: string;
+  verified: boolean;
+}
+
+export interface EscalationPacket {
+  should_escalate: boolean;
+  urgency: "normal" | "attention" | "urgent";
+  owner: string;
+  reason: string;
+  handoff_note: string;
+  transcript_excerpt: string;
+}
+
 export interface AnalysisResponse {
+  analysis_mode: "rules" | "openai";
+  matched_signals: string[];
   intent: Intent;
   sentiment: Sentiment;
   objection: Objection;
@@ -50,6 +81,9 @@ export interface AnalysisResponse {
   next_best_action: string;
   confidence: number;
   compliance: ComplianceResult;
+  compliance_evidence: ComplianceEvidence[];
+  product_references: ProductReference[];
+  escalation_packet: EscalationPacket | null;
   knowledge_refs: string[];
 }
 
@@ -58,6 +92,7 @@ export interface CallSummaryResponse {
   crm_note: string;
   recommended_next_step: string;
   compliance: ComplianceResult;
+  compliance_evidence: ComplianceEvidence[];
 }
 
 export interface DemoScenario {
