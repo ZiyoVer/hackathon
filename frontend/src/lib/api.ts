@@ -2,8 +2,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ detail: "API xatosi" }));
-    const detail = typeof body.detail === "string" ? body.detail : "API xatosi";
+    const body = await response.json().catch(() => ({ detail: "Server xatosi" }));
+    const detail = typeof body.detail === "string" ? body.detail : "Server xatosi";
     throw new Error(detail);
   }
 

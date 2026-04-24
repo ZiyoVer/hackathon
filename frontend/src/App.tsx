@@ -80,6 +80,15 @@ const temperatureLabels: Record<AnalysisResponse["lead_temperature"], string> = 
   hot: "Issiq"
 };
 
+const sqbFocusByIntent: Record<Intent, string[]> = {
+  credit_request: ["Kredit", "Kredit karta", "SQB Mobile"],
+  card_opening: ["Bank kartalari", "Kredit karta", "SQB Mobile"],
+  deposit: ["Omonatlar", "SQB Mobile", "Bank ofisi"],
+  leasing: ["Biznes xizmatlari", "Kredit", "Filial maslahati"],
+  complaint: ["Mijoz murojaati", "Xavfsizlik", "Aloqa markazi"],
+  general_question: ["SQB Mobile", "Kartalar", "To'lovlar"]
+};
+
 type SupportTab = "script" | "compliance" | "crm" | "transcript";
 
 function App() {
@@ -113,11 +122,10 @@ function App() {
   const signalItems = useMemo(() => {
     const complianceScore = summary?.compliance.score ?? analysis?.compliance.score ?? 0;
     return [
-      { label: "Intent", value: analysis ? intentLabels[analysis.intent] : "Aniqlanmagan" },
-      { label: "Priority", value: analysis ? priorityLabels[analysis.priority] : "Aniqlanmagan" },
-      { label: "Lead", value: analysis ? temperatureLabels[analysis.lead_temperature] : "Aniqlanmagan" },
-      { label: "Compliance", value: complianceScore ? `${complianceScore}%` : "0%" },
-      { label: "Mode", value: analysis ? analysis.analysis_mode : "rules" }
+      { label: "Mavzu", value: analysis ? intentLabels[analysis.intent] : "Aniqlanmagan" },
+      { label: "Ustuvorlik", value: analysis ? priorityLabels[analysis.priority] : "Aniqlanmagan" },
+      { label: "Qiziqish", value: analysis ? temperatureLabels[analysis.lead_temperature] : "Aniqlanmagan" },
+      { label: "Nazorat", value: complianceScore ? `${complianceScore}%` : "0%" }
     ];
   }, [analysis, summary]);
 
@@ -135,13 +143,13 @@ function App() {
 
     const brief = [
       `Mijoz: ${analysis.customer_summary}`,
-      `Intent: ${intentLabels[analysis.intent]}`,
-      `Risk: ${riskLabels[analysis.risk_level]}`,
-      `Priority: ${priorityLabels[analysis.priority]}`,
-      `Next step: ${analysis.next_best_action}`,
-      `Closing: ${analysis.closing_line}`,
-      `Tags: ${analysis.crm_tags.join(", ")}`,
-      analysis.escalation_packet?.should_escalate ? `Escalation: ${analysis.escalation_packet.handoff_note}` : ""
+      `Mavzu: ${intentLabels[analysis.intent]}`,
+      `Xavf: ${riskLabels[analysis.risk_level]}`,
+      `Ustuvorlik: ${priorityLabels[analysis.priority]}`,
+      `Keyingi qadam: ${analysis.next_best_action}`,
+      `Yakuniy gap: ${analysis.closing_line}`,
+      `Teglar: ${analysis.crm_tags.join(", ")}`,
+      analysis.escalation_packet?.should_escalate ? `Supervisorga: ${analysis.escalation_packet.handoff_note}` : ""
     ].join("\n");
 
     try {
@@ -253,15 +261,12 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">SQB Call Center</p>
-          <h1>Agent Assist Console</h1>
+          <p className="eyebrow">SQB Bank aloqa markazi</p>
+          <h1>SQB mijoz tahlili</h1>
         </div>
-        <div className="top-actions">
-          <img alt="" className="top-visual" src="/images/call-center-copilot.jpg" />
-          <div className="status-pill">
-            <span className="live-dot" />
-            Real-time tahlil
-          </div>
+        <div className="status-pill">
+          <span className="live-dot" />
+          Jonli tahlil
         </div>
       </header>
 
@@ -276,7 +281,7 @@ function App() {
         <section className="panel input-panel">
           <div className="panel-heading">
             <Mic size={20} />
-            <h2>Mijoz signali</h2>
+            <h2>Mijoz gapi</h2>
           </div>
 
           <div className="input-toolbar">
@@ -302,7 +307,7 @@ function App() {
             <UploadCloud size={24} />
             <div>
               <strong>{isUploading ? "Ovoz yuklanmoqda..." : "Ovoz fayl yuklash"}</strong>
-              <span>MP3, WAV, M4A yoki WEBM faylni STT orqali matnga aylantirish</span>
+              <span>MP3, WAV, M4A yoki WEBM faylni matnga aylantirish</span>
             </div>
             <input accept="audio/*" disabled={isUploading} onChange={uploadAudio} type="file" />
           </label>
@@ -322,8 +327,8 @@ function App() {
             <div className="audio-result">
               <FileAudio size={18} />
               <div>
-                <strong>STT: {audioResult.provider}</strong>
-                <span>{Math.round(audioResult.confidence * 100)}% confidence</span>
+                <strong>Ovozdan matn olindi</strong>
+                <span>{Math.round(audioResult.confidence * 100)}% ishonch</span>
               </div>
             </div>
           )}
@@ -353,9 +358,9 @@ function App() {
               </div>
 
               <div className="compact-tags">
-                <Badge label="Sentiment" tone={analysis.sentiment} value={sentimentLabels[analysis.sentiment]} />
+                <Badge label="Kayfiyat" tone={analysis.sentiment} value={sentimentLabels[analysis.sentiment]} />
                 <Badge label="E'tiroz" tone="amber" value={objectionLabels[analysis.objection]} />
-                <Badge label="Risk" tone={analysis.risk_level === "high" ? "negative" : "blue"} value={riskLabels[analysis.risk_level]} />
+                <Badge label="Xavf" tone={analysis.risk_level === "high" ? "negative" : "blue"} value={riskLabels[analysis.risk_level]} />
               </div>
 
               <div className="opportunity-box">
@@ -365,7 +370,7 @@ function App() {
 
               <ListBlock icon={ClipboardList} title="Ehtiyojlar" items={analysis.customer_needs} />
 
-              <ProductReferenceStrip analysis={analysis} />
+              <BankFocus intent={analysis.intent} />
             </>
           ) : (
             <div className="empty-state">
@@ -378,16 +383,16 @@ function App() {
 
       <section className="panel support-panel">
         <div className="tab-list" role="tablist" aria-label="Qo'llab-quvvatlash ma'lumotlari">
-          <TabButton active={activeSupportTab === "script"} label="Script" onClick={() => setActiveSupportTab("script")} />
+          <TabButton active={activeSupportTab === "script"} label="Javob" onClick={() => setActiveSupportTab("script")} />
           <TabButton
             active={activeSupportTab === "compliance"}
-            label="Compliance"
+            label="Nazorat"
             onClick={() => setActiveSupportTab("compliance")}
           />
           <TabButton active={activeSupportTab === "crm"} label="CRM" onClick={() => setActiveSupportTab("crm")} />
           <TabButton
             active={activeSupportTab === "transcript"}
-            label="Transcript"
+            label="Muloqot"
             onClick={() => setActiveSupportTab("transcript")}
           />
         </div>
@@ -418,42 +423,15 @@ function App() {
   );
 }
 
-function ProductReferenceStrip({ analysis }: { analysis: AnalysisResponse }) {
-  const references = analysis.product_references ?? [];
-  const signals = analysis.matched_signals ?? [];
-
-  if (references.length === 0 && signals.length === 0) {
-    return null;
-  }
-
+function BankFocus({ intent }: { intent: Intent }) {
   return (
-    <div className="reference-strip">
-      {references.length > 0 && (
-        <div>
-          <div className="section-label">SQB manbalar</div>
-          <div className="reference-grid">
-            {references.map((reference) => (
-              <article className="reference-card" key={reference.id}>
-                <span>{reference.category}</span>
-                <strong>{reference.title}</strong>
-                <p>{reference.why_it_matters}</p>
-                <small>{reference.verified ? "verified" : "fallback"} | {reference.script_anchor}</small>
-              </article>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {signals.length > 0 && (
-        <div className="matched-signals">
-          <div className="section-label">Matched signals</div>
-          <div className="tag-row">
-            {signals.map((signal) => (
-              <span key={signal}>{signal}</span>
-            ))}
-          </div>
-        </div>
-      )}
+    <div className="bank-focus">
+      <div className="section-label">SQB yo'nalishi</div>
+      <div className="tag-row">
+        {sqbFocusByIntent[intent].map((item) => (
+          <span key={item}>{item}</span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -482,7 +460,7 @@ function ScriptTab({
   if (scriptLines.length === 0) {
     return (
       <div className="empty-state compact">
-        <p>Tahlildan keyin agent aytadigan tayyor gaplar shu yerda chiqadi.</p>
+        <p>Tahlildan keyin operator aytadigan tayyor gaplar shu yerda chiqadi.</p>
       </div>
     );
   }
@@ -500,7 +478,7 @@ function ScriptTab({
 
       <button className="icon-button" disabled={isSynthesizing} onClick={() => void onSynthesize()} type="button">
         <PlayCircle size={17} />
-        {isSynthesizing ? "TTS..." : "Scriptni ovozga aylantirish"}
+        {isSynthesizing ? "Ovoz tayyorlanmoqda..." : "Javobni ovozga aylantirish"}
       </button>
 
       {ttsResult && (
@@ -514,7 +492,7 @@ function ScriptTab({
 
       {analysis?.closing_line && (
         <div className="closing-line">
-          <span>Closing line</span>
+          <span>Yakuniy gap</span>
           <strong>{analysis.closing_line}</strong>
         </div>
       )}
@@ -538,7 +516,7 @@ function CrmTab({
   if (!analysis && !summary) {
     return (
       <div className="empty-state compact">
-        <p>CRM brief va qo'ng'iroq xulosasi tahlildan keyin chiqadi.</p>
+        <p>CRM yozuv va qo'ng'iroq xulosasi tahlildan keyin chiqadi.</p>
       </div>
     );
   }
@@ -549,22 +527,22 @@ function CrmTab({
         <div className="battlecard">
           <div className="battlecard-head">
             <div>
-              <span>Agent Battlecard</span>
+              <span>CRM yozuv</span>
               <strong>{priorityLabels[analysis.priority]} holat</strong>
             </div>
             <button className="copy-button" onClick={() => void copyBrief()} type="button">
               <Copy size={15} />
-              {copied ? "Copied" : "CRM brief"}
+              {copied ? "Nusxalandi" : "CRM matn"}
             </button>
           </div>
 
           <div className="battlecard-grid">
             <div>
-              <span>Lead</span>
+              <span>Qiziqish</span>
               <strong>{temperatureLabels[analysis.lead_temperature]}</strong>
             </div>
             <div>
-              <span>Handoff</span>
+              <span>Keyingi yo'l</span>
               <strong>{analysis.handoff_recommendation}</strong>
             </div>
           </div>
@@ -579,8 +557,8 @@ function CrmTab({
 
       {analysis?.escalation_packet?.should_escalate && (
         <div className="escalation-card">
-          <div className="section-label">Supervisor packet</div>
-          <strong>{analysis.escalation_packet.owner} | {analysis.escalation_packet.urgency}</strong>
+          <div className="section-label">Supervisorga uzatish</div>
+          <strong>{analysis.escalation_packet.owner} | {priorityLabels[analysis.escalation_packet.urgency]}</strong>
           <p>{analysis.escalation_packet.reason}</p>
           <p>{analysis.escalation_packet.handoff_note}</p>
           {analysis.escalation_packet.transcript_excerpt && <small>{analysis.escalation_packet.transcript_excerpt}</small>}
@@ -592,7 +570,7 @@ function CrmTab({
           <h2>CRM uchun xulosa</h2>
           <p>{summary.summary}</p>
           <div>
-            <span>CRM note</span>
+            <span>CRM qayd</span>
             <strong>{summary.crm_note}</strong>
           </div>
           <div>
@@ -610,7 +588,7 @@ function TranscriptTab({ transcript }: { transcript: SpeakerLine[] }) {
     <div className="transcript-box in-tab">
       {transcript.map((line, index) => (
         <div className="transcript-line" key={`${line.speaker}-${index}`}>
-          <span>{line.speaker === "customer" ? "Mijoz" : "Agent"}</span>
+          <span>{line.speaker === "customer" ? "Mijoz" : "Operator"}</span>
           <p>{line.text}</p>
         </div>
       ))}
@@ -666,12 +644,12 @@ function CompliancePanel({
     <>
       <div className="panel-heading">
         <ShieldCheck size={20} />
-        <h2>Compliance</h2>
+        <h2>Bank talablari</h2>
       </div>
 
       <div className="compliance-head">
         <div>
-          <span>Status</span>
+          <span>Holat</span>
           <strong>{compliance.score}%</strong>
         </div>
         <StatusDot status={compliance.status} />
@@ -708,15 +686,12 @@ function CompliancePanel({
 
       {evidence.length > 0 && (
         <div className="evidence-list">
-          <div className="section-label">Evidence timeline</div>
+          <div className="section-label">Nazorat izohlari</div>
           {evidence.map((item) => (
             <div className={`evidence-item ${item.status}`} key={item.id}>
               <div>
                 <strong>{item.finding}</strong>
-                <span>
-                  {item.speaker}
-                  {item.line_index !== null ? ` #${item.line_index + 1}` : ""} | {item.severity} | -{item.score_impact}
-                </span>
+                {item.score_impact > 0 && <span>Ballga ta'siri: -{item.score_impact}</span>}
               </div>
               {item.safer_phrase && <p>{item.safer_phrase}</p>}
             </div>
@@ -731,7 +706,7 @@ function EmptyCompliance() {
   return (
     <div className="empty-state compact">
       <ShieldCheck size={28} />
-      <p>Compliance checklist tahlildan keyin chiqadi.</p>
+      <p>Bank talablari tahlildan keyin chiqadi.</p>
     </div>
   );
 }

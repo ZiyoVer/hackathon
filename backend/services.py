@@ -19,9 +19,9 @@ from backend.schemas import (
 
 
 KNOWLEDGE_REFS: dict[Intent, list[str]] = {
-    "credit_request": ["Kredit shartlari", "Foiz stavkasi disclosure", "Kredit kalkulyatori"],
-    "card_opening": ["Karta turlari", "Mobil banking ulash", "Karta xavfsizligi"],
-    "deposit": ["Omonat muddatlari", "Foiz hisoblash", "Muddatidan oldin yechish"],
+    "credit_request": ["SQB kredit shartlari", "Umumiy to'lov disclosure", "SQB Mobile ariza"],
+    "card_opening": ["SQB kredit karta", "SQB Mobile ulash", "Karta xavfsizligi"],
+    "deposit": ["SQB omonatlari", "SQB Mobile orqali ochish", "Bank ofisida rasmiylashtirish"],
     "leasing": ["Lizing arizasi", "Boshlang'ich to'lov", "Garov va hujjatlar"],
     "complaint": ["Shikoyat qabul qilish tartibi", "Murojaat raqami", "Eskalyatsiya"],
     "general_question": ["Umumiy bank xizmatlari", "Filial va aloqa markazi"],
@@ -31,11 +31,11 @@ KNOWLEDGE_REFS: dict[Intent, list[str]] = {
 PRODUCT_REFERENCES: dict[Intent, list[ProductReference]] = {
     "credit_request": [
         ProductReference(
-            id="credit-calculator",
-            title="Kredit kalkulyatori",
+            id="sqb-mobile-credit-application",
+            title="SQB Mobile orqali kredit arizasi",
             category="credit",
-            why_it_matters="Mijoz oylik to'lov va umumiy qaytariladigan summani oldindan ko'radi.",
-            script_anchor="Avval taxminiy oylik to'lovni hisoblab ko'rsataman.",
+            why_it_matters="Mijoz arizani masofadan boshlashi va taxminiy shartlarni rasmiy hisob-kitob bilan ko'rishi kerak.",
+            script_anchor="Avval ariza maqsadi va muddatini aniqlashtirib, umumiy to'lovni hisoblab ko'rsatamiz.",
             verified=True,
         ),
         ProductReference(
@@ -49,29 +49,29 @@ PRODUCT_REFERENCES: dict[Intent, list[ProductReference]] = {
     ],
     "card_opening": [
         ProductReference(
-            id="card-types",
-            title="Humo, Uzcard va xalqaro karta turlari",
+            id="sqb-credit-card",
+            title="SQB kredit karta",
             category="card",
-            why_it_matters="Karta tanlovi mijozning oylik tushumi, onlayn to'lovi yoki xalqaro xaridiga bog'liq.",
-            script_anchor="Kartadan asosan qayerda foydalanishingizni bilsam, sizga mos turini tanlab beraman.",
+            why_it_matters="SQB kredit karta bo'yicha limit 100 mln so'mgacha, foizsiz muddat 55 kungacha va ariza SQB Mobile orqali boshlanadi.",
+            script_anchor="Kredit karta uchun limit va to'lov shartlari rasmiy hisob-kitobdan keyin tasdiqlanadi.",
             verified=True,
         ),
         ProductReference(
-            id="mobile-banking",
-            title="Mobil banking ulash",
+            id="sqb-mobile",
+            title="SQB Mobile",
             category="digital",
-            why_it_matters="Karta ochilgandan keyin to'lov va xavfsizlik boshqaruvi uchun kerak.",
-            script_anchor="Karta ochilgach mobil bankingni ulab, onlayn to'lovlarni boshqarish mumkin.",
+            why_it_matters="Ilovada to'lov, valyuta konvertatsiyasi, omonat va kredit xizmatlarini boshqarish mumkin.",
+            script_anchor="SQB Mobile orqali xizmatlarni masofadan boshqarishingiz mumkin.",
             verified=True,
         ),
     ],
     "deposit": [
         ProductReference(
-            id="deposit-terms",
-            title="Omonat muddatlari",
+            id="sqb-deposits",
+            title="SQB omonatlari",
             category="deposit",
-            why_it_matters="Muddat va yechish sharti foiz daromadiga bevosita ta'sir qiladi.",
-            script_anchor="Omonat muddati va muddatidan oldin yechish shartlarini solishtirib beraman.",
+            why_it_matters="Omonat SQB Mobile orqali tezkor yoki bank ofisida shaxsni tasdiqlovchi hujjat bilan ochiladi.",
+            script_anchor="Omonat maqsadingizga qarab muddat, foiz va yechish shartlarini solishtirib beramiz.",
             verified=True,
         )
     ],

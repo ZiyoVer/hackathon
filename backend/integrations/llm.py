@@ -37,7 +37,7 @@ class LLMAnalyzer:
         payload = await self._openai_structured_response(
             schema_name="analysis_response",
             schema=ANALYSIS_SCHEMA,
-            system_prompt=ANALYSIS_SYSTEM_PROMPT,
+            system_prompt=f"{ANALYSIS_SYSTEM_PROMPT}\n\n{SQB_OFFICIAL_CONTEXT}",
             user_prompt=f"Mijoz xabari:\n{message}",
         )
         try:
@@ -50,7 +50,7 @@ class LLMAnalyzer:
         response_payload = await self._openai_structured_response(
             schema_name="call_summary_response",
             schema=CALL_SUMMARY_SCHEMA,
-            system_prompt=CALL_SUMMARY_SYSTEM_PROMPT,
+            system_prompt=f"{CALL_SUMMARY_SYSTEM_PROMPT}\n\n{SQB_OFFICIAL_CONTEXT}",
             user_prompt=f"Call transcript:\n{transcript}",
         )
         try:
@@ -186,6 +186,8 @@ def _sanitize_safe_language(text: str) -> str:
         "raqobatbardosh shartlar": "aniq hisob-kitob qilingan shartlar",
         "eng qulay shartlarni taqdim etamiz": "mavjud shartlarni aniq tushuntirib beramiz",
         "eng qulay shartlar": "mavjud shartlar",
+        "bilmoqchiligingiz uchun sizni qutlayman": "bilmoqchi ekaningizni tushundim",
+        "sizni qutlayman": "tushunarli",
         "eng past": "aniq hisoblangan",
         "juda past": "aniq hisoblangan",
         "boshqa banklardan yaxshiroq": "mavjud shartlarni solishtirishga yordam beradigan",
@@ -237,6 +239,20 @@ compliance_evidence har bir muhim compliance topilmasi uchun timeline elementi b
 product_references mijoz niyatiga mos mahsulot, disclosure yoki jarayon manbalarini bersin.
 complaint, not_trust, competitor_better, high risk yoki qizil compliance bo'lsa escalation_packet to'ldirilsin;
 aks holda escalation_packet null bo'lsin.
+""".strip()
+
+SQB_OFFICIAL_CONTEXT = """
+Rasmiy SQB konteksti (sqb.uz):
+- Kredit karta: SQB Mobile orqali ariza yuborish mumkin; limit 100 mln so'mgacha;
+  55 kungacha foizsiz muddat; yillik foiz stavkasi 26,9%; kredit muddati 48 oy;
+  kartani chiqarish 0 so'm.
+- Omonatlar: SQB Mobile orqali tezkor ochish yoki qulay bank ofisida rasmiylashtirish mumkin;
+  bank ofisida shaxsni tasdiqlovchi hujjat va mablag' kerak bo'ladi.
+- SQB Mobile: uydan chiqmasdan to'lov qilish, valyutani konvertatsiya qilish,
+  omonat va kreditlarni rasmiylashtirish imkoniyatlarini beradi.
+
+Operator rasmiy shartlarni aniq va ehtiyotkor aytsin. Yakuniy qaror, limit, foiz va to'lovlar
+mijoz ma'lumotlari, bank tasdig'i va rasmiy hisob-kitobga bog'liqligini eslatsin.
 """.strip()
 
 CALL_SUMMARY_SYSTEM_PROMPT = """
