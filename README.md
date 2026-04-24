@@ -54,6 +54,19 @@ Railway env variables uchun `.env.example`dagi nomlardan foydalaning. Secret key
 - `POST /api/audio/transcribe`
 - `POST /api/audio/synthesize`
 
+## AI tahlil
+
+Default holatda tahlil local rules bilan ishlaydi. Real LLM ulash uchun:
+
+```env
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+```
+
+Backend OpenAI Responses API va Structured Outputs JSON schema orqali javob oladi.
+`AI_FALLBACK_TO_RULES=true` bo'lsa OpenAI xatosida demo to'xtab qolmaydi va local rules natija qaytaradi.
+
 ## Aisha AI integratsiya
 
 Aisha docs bo'yicha:

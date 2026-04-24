@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.config import get_settings
 from backend.integrations.aisha import AishaClient
+from backend.integrations.llm import LLMAnalyzer
 from backend.integrations.wasabi import WasabiStorage
 from backend.schemas import (
     AnalysisResponse,
@@ -40,12 +41,14 @@ app.add_middleware(
 )
 
 aisha_client = AishaClient(settings)
+llm_analyzer = LLMAnalyzer(settings)
 storage = WasabiStorage(settings)
 
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "service": settings.app_name}
+    ai_provider = "openai" if llm_analyzer.enabled else "rules"
+    return {"status": "ok", "service": settings.app_name, "ai_provider": ai_provider}
 
 
 @app.get("/api/demo-scenarios", response_model=list[DemoScenario])
@@ -55,11 +58,23 @@ async def demo_scenarios() -> list[DemoScenario]:
 
 @app.post("/api/analyze-message", response_model=AnalysisResponse)
 async def analyze_single_message(payload: AnalyzeMessageRequest) -> AnalysisResponse:
+    if llm_analyzer.enabled:
+        try:
+            return await llm_analyzer.analyze_message(payload.message)
+        except Exception as exc:
+            if not settings.ai_fallback_to_rules:
+                raise HTTPException(status_code=502, detail=f"AI tahlil xatosi: {exc}") from exc
     return analyze_message(payload.message)
 
 
 @app.post("/api/analyze-call", response_model=CallSummaryResponse)
 async def analyze_full_call(payload: AnalyzeCallRequest) -> CallSummaryResponse:
+    if llm_analyzer.enabled:
+        try:
+            return await llm_analyzer.analyze_call(payload)
+        except Exception as exc:
+            if not settings.ai_fallback_to_rules:
+                raise HTTPException(status_code=502, detail=f"AI summary xatosi: {exc}") from exc
     return analyze_call(payload)
 
 

@@ -7,6 +7,14 @@ class Settings(BaseSettings):
     app_name: str = "SQB Agent Copilot"
     frontend_origin: str = "http://localhost:5173"
 
+    ai_provider: str = "rules"
+    ai_fallback_to_rules: bool = True
+
+    openai_api_key: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-4o-mini"
+    openai_timeout_seconds: float = 30.0
+
     aisha_api_key: str = ""
     aisha_api_base_url: str = "https://back.aisha.group"
     aisha_stt_path: str = "/api/v2/stt/post/"
@@ -27,6 +35,14 @@ class Settings(BaseSettings):
     wasabi_public_base_url: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    @property
+    def has_openai(self) -> bool:
+        return bool(self.openai_api_key and self.openai_base_url and self.openai_model)
+
+    @property
+    def use_openai(self) -> bool:
+        return self.ai_provider.lower() == "openai" and self.has_openai
 
     @property
     def has_aisha(self) -> bool:
