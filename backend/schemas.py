@@ -49,10 +49,16 @@ class AnalysisResponse(BaseModel):
     customer_summary: str = ""
     customer_needs: list[str] = Field(default_factory=list)
     risk_level: Literal["low", "medium", "high"] = "medium"
+    priority: Literal["normal", "attention", "urgent"] = "normal"
+    lead_temperature: Literal["cold", "warm", "hot"] = "warm"
     opportunity: str = ""
+    handoff_recommendation: str = ""
     suggested_response: str
     agent_script: list[str] = Field(default_factory=list)
     follow_up_questions: list[str] = Field(default_factory=list)
+    do_not_say: list[str] = Field(default_factory=list)
+    closing_line: str = ""
+    crm_tags: list[str] = Field(default_factory=list)
     next_best_action: str
     confidence: float = Field(ge=0, le=1)
     compliance: ComplianceResult

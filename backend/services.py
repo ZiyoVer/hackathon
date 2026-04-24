@@ -78,10 +78,16 @@ def analyze_message(message: str) -> AnalysisResponse:
         customer_summary=_customer_summary(intent, objection, message),
         customer_needs=_customer_needs(intent, objection),
         risk_level=_risk_level(sentiment, objection),
+        priority=_priority(sentiment, objection),
+        lead_temperature=_lead_temperature(intent, objection),
         opportunity=_opportunity(intent, objection),
+        handoff_recommendation=_handoff_recommendation(intent, objection),
         suggested_response=_suggest_response(intent, objection),
         agent_script=_agent_script(intent, objection),
         follow_up_questions=_follow_up_questions(intent, objection),
+        do_not_say=_do_not_say(intent, objection),
+        closing_line=_closing_line(intent, objection),
+        crm_tags=_crm_tags(intent, objection),
         next_best_action=_next_best_action(intent, objection),
         confidence=_confidence(intent, objection),
         compliance=compliance,
@@ -228,6 +234,22 @@ def _risk_level(sentiment: Sentiment, objection: Objection) -> Literal["low", "m
     return "low"
 
 
+def _priority(sentiment: Sentiment, objection: Objection) -> Literal["normal", "attention", "urgent"]:
+    if sentiment == "negative" or objection in {"not_trust", "competitor_better"}:
+        return "urgent"
+    if objection != "none":
+        return "attention"
+    return "normal"
+
+
+def _lead_temperature(intent: Intent, objection: Objection) -> Literal["cold", "warm", "hot"]:
+    if intent in {"credit_request", "card_opening", "deposit", "leasing"} and objection == "none":
+        return "hot"
+    if intent in {"credit_request", "card_opening", "deposit", "leasing"}:
+        return "warm"
+    return "cold"
+
+
 def _opportunity(intent: Intent, objection: Objection) -> str:
     if intent == "credit_request":
         return "Kredit kalkulyatori, sug'urta va karta orqali oylik to'lov yechimini taklif qilish mumkin."
@@ -240,6 +262,16 @@ def _opportunity(intent: Intent, objection: Objection) -> str:
     if intent == "complaint":
         return "Muammoni tez hal qilish orqali mijoz ishonchini saqlab qolish mumkin."
     return "Ehtiyoj aniqlansa, mos mahsulotga yo'naltirish mumkin."
+
+
+def _handoff_recommendation(intent: Intent, objection: Objection) -> str:
+    if intent == "complaint" or objection == "not_trust":
+        return "Supervisorga eskalyatsiya qilish tavsiya etiladi."
+    if objection == "competitor_better":
+        return "Senior agent yoki mahsulot eksperti bilan solishtirma taklif tayyorlash."
+    if intent == "credit_request":
+        return "Kredit kalkulyatori yoki kredit bo'limi bilan keyingi qadamni ochish."
+    return "Agent o'zi davom ettirishi mumkin."
 
 
 def _agent_script(intent: Intent, objection: Objection) -> list[str]:
@@ -266,6 +298,41 @@ def _agent_script(intent: Intent, objection: Objection) -> list[str]:
     if objection != "none":
         return [opener, "Xavotiringizni tushunaman, shartlarni birma-bir solishtirib ko'raylik."]
     return [opener, "Savolingizni aniqlashtirsangiz, eng mos yechimni taklif qilaman."]
+
+
+def _do_not_say(intent: Intent, objection: Objection) -> list[str]:
+    result = [
+        "Sizga kredit aniq chiqadi.",
+        "Foiz stavkasi hamma uchun bir xil.",
+    ]
+    if intent == "credit_request":
+        result.append("Umumiy to'lovni keyin bilasiz.")
+    if objection in {"interest_rate_expensive", "competitor_better"}:
+        result.append("Boshqa banklar yomonroq.")
+    if objection == "not_trust":
+        result.append("Ishonmasangiz o'zingiz bilasiz.")
+    return result
+
+
+def _closing_line(intent: Intent, objection: Objection) -> str:
+    if intent == "credit_request":
+        return "Sizga aniq qaror qilish uchun oylik to'lov va umumiy summani hisoblab ko'rsataman."
+    if intent == "card_opening":
+        return "Sizga mos karta turini tanlab, mobil bankingni ulash jarayonini ko'rsataman."
+    if intent == "complaint":
+        return "Murojaatingizni ro'yxatdan o'tkazib, natijani kuzatish uchun raqam beraman."
+    return "Siz uchun eng mos variantni aniqlab, keyingi qadamni taklif qilaman."
+
+
+def _crm_tags(intent: Intent, objection: Objection) -> list[str]:
+    tags = [intent]
+    if objection != "none":
+        tags.append(objection)
+    if intent == "credit_request":
+        tags.extend(["loan_lead", "calculator_needed"])
+    if intent == "complaint":
+        tags.append("supervisor_watch")
+    return tags
 
 
 def _follow_up_questions(intent: Intent, objection: Objection) -> list[str]:

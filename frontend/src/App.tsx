@@ -2,8 +2,10 @@ import {
   AlertTriangle,
   BadgeCheck,
   ClipboardList,
+  Copy,
   FileAudio,
   FileText,
+  Flag,
   Gauge,
   ListChecks,
   Mic,
@@ -71,6 +73,18 @@ const riskLabels: Record<AnalysisResponse["risk_level"], string> = {
   high: "Yuqori"
 };
 
+const priorityLabels: Record<AnalysisResponse["priority"], string> = {
+  normal: "Normal",
+  attention: "E'tibor",
+  urgent: "Shoshilinch"
+};
+
+const temperatureLabels: Record<AnalysisResponse["lead_temperature"], string> = {
+  cold: "Sovuq",
+  warm: "Iliq",
+  hot: "Issiq"
+};
+
 function App() {
   const [message, setMessage] = useState(FALLBACK_MESSAGE);
   const [transcript, setTranscript] = useState<SpeakerLine[]>(DEFAULT_TRANSCRIPT);
@@ -85,6 +99,7 @@ function App() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     apiGet<DemoScenario[]>("/api/demo-scenarios")
@@ -101,13 +116,38 @@ function App() {
     const complianceScore = summary?.compliance.score ?? analysis?.compliance.score ?? 0;
     return [
       { label: "Intent", value: analysis ? intentLabels[analysis.intent] : "Aniqlanmagan", icon: Target },
-      { label: "Risk", value: analysis ? riskLabels[analysis.risk_level] : "Aniqlanmagan", icon: Gauge },
+      { label: "Priority", value: analysis ? priorityLabels[analysis.priority] : "Aniqlanmagan", icon: Flag },
+      { label: "Lead", value: analysis ? temperatureLabels[analysis.lead_temperature] : "Aniqlanmagan", icon: Gauge },
       { label: "Compliance", value: complianceScore ? `${complianceScore}%` : "0%", icon: ShieldCheck }
     ];
   }, [analysis, summary]);
 
   const scriptLines = analysis?.agent_script?.length ? analysis.agent_script : analysis ? [analysis.suggested_response] : [];
   const compliance = summary?.compliance ?? analysis?.compliance ?? null;
+
+  const copyBrief = async () => {
+    if (!analysis) {
+      return;
+    }
+
+    const brief = [
+      `Mijoz: ${analysis.customer_summary}`,
+      `Intent: ${intentLabels[analysis.intent]}`,
+      `Risk: ${riskLabels[analysis.risk_level]}`,
+      `Priority: ${priorityLabels[analysis.priority]}`,
+      `Next step: ${analysis.next_best_action}`,
+      `Closing: ${analysis.closing_line}`,
+      `Tags: ${analysis.crm_tags.join(", ")}`
+    ].join("\n");
+
+    try {
+      await navigator.clipboard.writeText(brief);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch (caught: unknown) {
+      setError(getErrorMessage(caught));
+    }
+  };
 
   const analyzeText = async (value = message) => {
     if (!value.trim()) {
@@ -334,6 +374,36 @@ function App() {
                 <span>Imkoniyat</span>
                 <p>{analysis.opportunity}</p>
               </div>
+
+              <div className="battlecard">
+                <div className="battlecard-head">
+                  <div>
+                    <span>Agent Battlecard</span>
+                    <strong>{priorityLabels[analysis.priority]} holat</strong>
+                  </div>
+                  <button className="copy-button" onClick={() => void copyBrief()} type="button">
+                    <Copy size={15} />
+                    {copied ? "Copied" : "CRM brief"}
+                  </button>
+                </div>
+
+                <div className="battlecard-grid">
+                  <div>
+                    <span>Lead</span>
+                    <strong>{temperatureLabels[analysis.lead_temperature]}</strong>
+                  </div>
+                  <div>
+                    <span>Handoff</span>
+                    <strong>{analysis.handoff_recommendation}</strong>
+                  </div>
+                </div>
+
+                <div className="tag-row">
+                  {analysis.crm_tags.map((tag) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
+                </div>
+              </div>
             </>
           ) : (
             <div className="empty-state">
@@ -375,6 +445,15 @@ function App() {
               )}
 
               <ListBlock icon={Target} title="Aniqlashtiruvchi savollar" items={analysis?.follow_up_questions ?? []} />
+
+              {analysis?.closing_line && (
+                <div className="closing-line">
+                  <span>Closing line</span>
+                  <strong>{analysis.closing_line}</strong>
+                </div>
+              )}
+
+              <ListBlock icon={AlertTriangle} title="Aytmaslik kerak" items={analysis?.do_not_say ?? []} />
             </>
           ) : (
             <div className="empty-state compact">

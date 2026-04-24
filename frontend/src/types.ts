@@ -37,10 +37,16 @@ export interface AnalysisResponse {
   customer_summary: string;
   customer_needs: string[];
   risk_level: "low" | "medium" | "high";
+  priority: "normal" | "attention" | "urgent";
+  lead_temperature: "cold" | "warm" | "hot";
   opportunity: string;
+  handoff_recommendation: string;
   suggested_response: string;
   agent_script: string[];
   follow_up_questions: string[];
+  do_not_say: string[];
+  closing_line: string;
+  crm_tags: string[];
   next_best_action: string;
   confidence: number;
   compliance: ComplianceResult;

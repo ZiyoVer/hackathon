@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -131,6 +132,7 @@ def _normalize_analysis(response: AnalysisResponse) -> AnalysisResponse:
     return response.model_copy(
         update={
             "agent_script": script,
+            "crm_tags": [_slugify_tag(tag) for tag in response.crm_tags if tag.strip()],
             "compliance": _normalize_compliance(response.compliance),
         }
     )
@@ -142,6 +144,20 @@ def _normalize_compliance(compliance: ComplianceResult) -> ComplianceResult:
     return compliance.model_copy(update={"score": score, "status": status})
 
 
+def _slugify_tag(tag: str) -> str:
+    transliterated = (
+        tag.lower()
+        .replace("o‘", "o")
+        .replace("g‘", "g")
+        .replace("'", "")
+        .replace("`", "")
+        .replace("‘", "")
+        .replace("’", "")
+    )
+    slug = re.sub(r"[^a-z0-9]+", "_", transliterated).strip("_")
+    return slug or "general"
+
+
 ANALYSIS_SYSTEM_PROMPT = """
 Siz SQB bank call-markaz agenti uchun AI copilot tahlilchisiz.
 Bu chat-bot emas: mijozga bevosita yozishmang, agent uchun tahlil, tayyor script,
@@ -151,6 +167,12 @@ agent_script ichidagi har bir element agent mijozga aynan o'qib beradigan tayyor
 suggested_response bitta asosiy tayyor javob bo'lsin, reklama yoki ortiqcha va'da bermang.
 Aniq foiz stavkasi berilmagan bo'lsa stavka aytmang va "raqobatbardosh" deb va'da bermang.
 Kreditda "aniq hisob-kitob qilib ko'rsatamiz" va "umumiy to'lov bilan tanishing" mazmunini ishlating.
+priority agent qanchalik tez harakat qilishi kerakligini bildiradi: normal, attention yoki urgent.
+lead_temperature mijozning sotuvga yaqinligini bildiradi: cold, warm yoki hot.
+handoff_recommendation qisqa amaliy tavsiya bo'lsin: agent davom etsinmi, senior agentmi yoki supervisormi.
+do_not_say xavfli va'dalar, noto'g'ri solishtirishlar va compliance buzadigan iboralar ro'yxati bo'lsin.
+closing_line agent suhbat oxirida aytadigan bitta tayyor jumla bo'lsin.
+crm_tags kichik snake_case taglar bo'lsin.
 compliance.score va compliance.status mos bo'lsin: 80-100 green, 60-79 yellow, 0-59 red.
 Bank compliance bo'yicha ehtiyotkor bo'ling: kreditda foiz stavkasi, umumiy to'lov,
 muddat va shaxsiy ma'lumotlar roziligi eslatilishi kerak. JSON schema'dan chetga chiqmang.
@@ -204,10 +226,16 @@ ANALYSIS_SCHEMA = {
         "customer_summary": {"type": "string"},
         "customer_needs": {"type": "array", "items": {"type": "string"}},
         "risk_level": {"type": "string", "enum": ["low", "medium", "high"]},
+        "priority": {"type": "string", "enum": ["normal", "attention", "urgent"]},
+        "lead_temperature": {"type": "string", "enum": ["cold", "warm", "hot"]},
         "opportunity": {"type": "string"},
+        "handoff_recommendation": {"type": "string"},
         "suggested_response": {"type": "string"},
         "agent_script": {"type": "array", "items": {"type": "string"}},
         "follow_up_questions": {"type": "array", "items": {"type": "string"}},
+        "do_not_say": {"type": "array", "items": {"type": "string"}},
+        "closing_line": {"type": "string"},
+        "crm_tags": {"type": "array", "items": {"type": "string"}},
         "next_best_action": {"type": "string"},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "compliance": COMPLIANCE_SCHEMA,
@@ -220,10 +248,16 @@ ANALYSIS_SCHEMA = {
         "customer_summary",
         "customer_needs",
         "risk_level",
+        "priority",
+        "lead_temperature",
         "opportunity",
+        "handoff_recommendation",
         "suggested_response",
         "agent_script",
         "follow_up_questions",
+        "do_not_say",
+        "closing_line",
+        "crm_tags",
         "next_best_action",
         "confidence",
         "compliance",

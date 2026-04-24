@@ -2,8 +2,8 @@
   color-scheme: light;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #18201f;
-  background: #eef2f3;
+  color: #1d2422;
+  background: #f5f6f6;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   letter-spacing: 0;
@@ -17,9 +17,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(238, 242, 243, 0.96)),
-    #eef2f3;
+  background: #f5f6f6;
 }
 
 button,
@@ -39,7 +37,7 @@ input:disabled {
 }
 
 .app-shell {
-  width: min(1380px, calc(100% - 32px));
+  width: min(1320px, calc(100% - 32px));
   min-height: 100vh;
   margin: 0 auto;
   padding: 22px 0 30px;
@@ -50,12 +48,12 @@ input:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-height: 72px;
+  min-height: 64px;
 }
 
 .topbar h1 {
   margin: 3px 0 0;
-  font-size: clamp(28px, 3.8vw, 42px);
+  font-size: clamp(25px, 3.2vw, 36px);
   line-height: 1.03;
 }
 
@@ -113,7 +111,7 @@ input:disabled {
   grid-template-columns: auto 1fr;
   align-items: stretch;
   gap: 12px;
-  margin: 12px 0;
+  margin: 8px 0 12px;
 }
 
 .strip-title {
@@ -124,7 +122,7 @@ input:disabled {
   padding: 0 14px;
   border: 1px solid #d8dfdd;
   border-radius: 8px;
-  background: #ffffff;
+  background: transparent;
   color: #27322f;
   font-weight: 800;
 }
@@ -144,8 +142,8 @@ input:disabled {
 .scenario-button {
   display: grid;
   gap: 4px;
-  min-height: 68px;
-  padding: 11px 12px;
+  min-height: 60px;
+  padding: 10px 12px;
   border: 1px solid #d9e0dd;
   border-radius: 8px;
   background: #ffffff;
@@ -171,8 +169,8 @@ input:disabled {
 
 .score-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
   margin: 12px 0;
 }
 
@@ -181,8 +179,8 @@ input:disabled {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 10px;
-  min-height: 58px;
-  padding: 13px 14px;
+  min-height: 52px;
+  padding: 11px 13px;
   border: 1px solid #d8dfdd;
   border-radius: 8px;
   background: #ffffff;
@@ -218,8 +216,8 @@ input:disabled {
 .panel {
   border: 1px solid #d8dfdd;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 14px 34px rgba(34, 48, 46, 0.08);
+  background: #ffffff;
+  box-shadow: none;
   padding: 16px;
 }
 
@@ -262,9 +260,9 @@ input:disabled {
   min-height: 72px;
   margin-top: 12px;
   padding: 13px;
-  border: 1px dashed #0b7d87;
+  border: 1px dashed #97aaa7;
   border-radius: 8px;
-  background: #eefbfa;
+  background: #f7faf9;
   color: #193432;
 }
 
@@ -437,7 +435,9 @@ input:disabled {
 .analysis-summary,
 .next-action,
 .opportunity-box,
-.list-block {
+.list-block,
+.battlecard,
+.closing-line {
   margin-top: 14px;
   padding-top: 13px;
   border-top: 1px solid #e4ebe8;
@@ -448,6 +448,90 @@ input:disabled {
   margin: 7px 0 0;
   color: #17211f;
   line-height: 1.48;
+}
+
+.battlecard {
+  display: grid;
+  gap: 12px;
+}
+
+.battlecard-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.battlecard-head div,
+.closing-line {
+  display: grid;
+  gap: 4px;
+}
+
+.battlecard-head span,
+.battlecard-grid span,
+.closing-line span {
+  color: #64706d;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.battlecard-head strong,
+.closing-line strong {
+  line-height: 1.36;
+}
+
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #cbd5d2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #24302e;
+  font-size: 13px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.battlecard-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.45fr) minmax(220px, 1fr);
+  gap: 8px;
+}
+
+.battlecard-grid div {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid #e0e7e4;
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.battlecard-grid strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.tag-row span {
+  padding: 6px 8px;
+  border: 1px solid #d9e0dd;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #465350;
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .section-label.with-icon {
@@ -499,8 +583,8 @@ input:disabled {
   width: 26px;
   height: 26px;
   border-radius: 999px;
-  background: #0b7d87;
-  color: #ffffff;
+  background: #eef8f7;
+  color: #0b5f66;
   font-size: 12px;
   font-weight: 850;
 }
@@ -614,7 +698,7 @@ input:disabled {
   padding: 16px;
   border-left: 4px solid #0b7d87;
   border-radius: 8px;
-  background: #f5fbfa;
+  background: #ffffff;
 }
 
 .summary-band h2,
@@ -677,6 +761,10 @@ input:disabled {
   .scenario-list,
   .score-row,
   .badge-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .battlecard-grid {
     grid-template-columns: 1fr;
   }
 
