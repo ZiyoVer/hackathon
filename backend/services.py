@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from backend.schemas import (
     AnalysisResponse,
     AnalyzeCallRequest,
@@ -73,7 +75,13 @@ def analyze_message(message: str) -> AnalysisResponse:
         intent=intent,
         sentiment=sentiment,
         objection=objection,
+        customer_summary=_customer_summary(intent, objection, message),
+        customer_needs=_customer_needs(intent, objection),
+        risk_level=_risk_level(sentiment, objection),
+        opportunity=_opportunity(intent, objection),
         suggested_response=_suggest_response(intent, objection),
+        agent_script=_agent_script(intent, objection),
+        follow_up_questions=_follow_up_questions(intent, objection),
         next_best_action=_next_best_action(intent, objection),
         confidence=_confidence(intent, objection),
         compliance=compliance,
@@ -176,6 +184,124 @@ def _suggest_response(intent: Intent, objection: Objection) -> str:
             "Natijani kuzatish uchun murojaat raqamini taqdim etamiz."
         )
     return "Savolingizni aniqlashtirsangiz, sizga mos bank xizmatini topib beraman."
+
+
+def _customer_summary(intent: Intent, objection: Objection, message: str) -> str:
+    if intent == "credit_request":
+        suffix = " Foiz stavkasi bo'yicha xavotiri bor." if objection != "none" else ""
+        return f"Mijoz kredit olish niyatida va shartlarni solishtirmoqchi.{suffix}"
+    if intent == "card_opening":
+        return "Mijoz karta ochish va o'ziga mos karta turini tanlash bo'yicha maslahat so'ramoqda."
+    if intent == "deposit":
+        return "Mijoz omonat shartlari, foiz hisoblanishi va muddat bo'yicha qaror qilmoqchi."
+    if intent == "leasing":
+        return "Mijoz lizing shartlari, boshlang'ich to'lov va muddat bo'yicha ma'lumot izlamoqda."
+    if intent == "complaint":
+        return "Mijoz muammo yoki shikoyat bilan murojaat qilgan, eskalyatsiya ehtimoli bor."
+    return f"Mijoz umumiy bank xizmati bo'yicha savol berdi: {message[:160]}"
+
+
+def _customer_needs(intent: Intent, objection: Objection) -> list[str]:
+    needs: dict[Intent, list[str]] = {
+        "credit_request": ["Kredit summasi va muddatini aniqlash", "Oylik to'lovni oldindan bilish"],
+        "card_opening": ["Mos karta turini tanlash", "Mobil banking va onlayn to'lov imkoniyatini tushunish"],
+        "deposit": ["Omonat foizi va muddatini solishtirish", "Pulni muddatidan oldin yechish shartini bilish"],
+        "leasing": ["Boshlang'ich to'lovni bilish", "Lizing muddati va hujjatlarini aniqlash"],
+        "complaint": ["Muammoni tez hal qilish", "Murojaat holatini kuzatish"],
+        "general_question": ["Ehtiyojni aniqlashtirish", "Mos bank xizmatini topish"],
+    }
+    result = list(needs[intent])
+    if objection == "interest_rate_expensive":
+        result.append("Foiz stavkasini boshqa banklar bilan solishtirish")
+    elif objection == "competitor_better":
+        result.append("Raqobatchi bank shartlariga nisbatan afzallikni ko'rish")
+    elif objection == "not_trust":
+        result.append("Bank shartlariga ishonch hosil qilish")
+    return result
+
+
+def _risk_level(sentiment: Sentiment, objection: Objection) -> Literal["low", "medium", "high"]:
+    if sentiment == "negative" or objection in {"not_trust", "competitor_better"}:
+        return "high"
+    if objection != "none":
+        return "medium"
+    return "low"
+
+
+def _opportunity(intent: Intent, objection: Objection) -> str:
+    if intent == "credit_request":
+        return "Kredit kalkulyatori, sug'urta va karta orqali oylik to'lov yechimini taklif qilish mumkin."
+    if intent == "card_opening":
+        return "Karta bilan birga mobil banking, SMS xabarnoma va omonat mahsulotini taklif qilish mumkin."
+    if intent == "deposit":
+        return "Mijozga muddatli omonat va karta orqali foiz tushumini boshqarishni taklif qilish mumkin."
+    if intent == "leasing":
+        return "Lizing arizasi uchun hujjatlar ro'yxati va hisob-kitobni yuborish mumkin."
+    if intent == "complaint":
+        return "Muammoni tez hal qilish orqali mijoz ishonchini saqlab qolish mumkin."
+    return "Ehtiyoj aniqlansa, mos mahsulotga yo'naltirish mumkin."
+
+
+def _agent_script(intent: Intent, objection: Objection) -> list[str]:
+    opener = "Tushunarli, sizga aniq va shaffof ma'lumot beraman."
+    if intent == "credit_request":
+        return [
+            opener,
+            "Kredit summasi, muddat va daromadingizga qarab oylik to'lovni hisoblab ko'rsatamiz.",
+            "Foiz stavkasi va umumiy qaytariladigan summa bilan oldindan tanishib chiqishingiz zarur.",
+            "Agar xohlasangiz, hozir taxminiy kalkulyatsiyani ko'rib chiqamiz.",
+        ]
+    if intent == "card_opening":
+        return [
+            opener,
+            "Kartadan asosan qayerda foydalanishingizni bilsam, sizga mos turini tanlab beraman.",
+            "Karta ochilgach mobil bankingni ulab, onlayn to'lovlarni boshqarish mumkin.",
+        ]
+    if intent == "complaint":
+        return [
+            "Murojaatingizni qabul qildim, holatni aniqlashtirib ro'yxatdan o'tkazamiz.",
+            "Tekshiruv natijasini kuzatish uchun murojaat raqamini beramiz.",
+            "Agar masala tezkor bo'lsa, supervisorga eskalyatsiya qilaman.",
+        ]
+    if objection != "none":
+        return [opener, "Xavotiringizni tushunaman, shartlarni birma-bir solishtirib ko'raylik."]
+    return [opener, "Savolingizni aniqlashtirsangiz, eng mos yechimni taklif qilaman."]
+
+
+def _follow_up_questions(intent: Intent, objection: Objection) -> list[str]:
+    questions: dict[Intent, list[str]] = {
+        "credit_request": [
+            "Qancha summa va necha oy muddatga kredit kerak?",
+            "Oylik to'lov uchun qulay diapazoningiz qanday?",
+            "Daromad manbangiz rasmiy tasdiqlanganmi?",
+        ],
+        "card_opening": [
+            "Kartadan oylik tushishi, onlayn to'lov yoki xalqaro xarid uchun foydalanasizmi?",
+            "Uzcard/Humo yoki xalqaro karta kerakmi?",
+        ],
+        "deposit": [
+            "Omonatni qancha muddatga joylashtirmoqchisiz?",
+            "Pulni muddatidan oldin yechish ehtimoli bormi?",
+        ],
+        "leasing": [
+            "Lizing obyekti qiymati qancha?",
+            "Boshlang'ich to'lov uchun qancha mablag' ajratgansiz?",
+        ],
+        "complaint": [
+            "Muammo qachon yuz berdi?",
+            "Telefon raqamingiz yoki murojaatga bog'liq hujjat raqami bormi?",
+        ],
+        "general_question": [
+            "Qaysi xizmat bo'yicha maslahat kerak?",
+            "Siz uchun eng muhim shart nima: narx, tezlik yoki qulaylik?",
+        ],
+    }
+    result = list(questions[intent])
+    if objection == "competitor_better":
+        result.append("Boshqa bankda qaysi shart sizga ma'qul bo'ldi?")
+    if objection == "interest_rate_expensive":
+        result.append("Siz kutayotgan foiz yoki oylik to'lov diapazoni qanday?")
+    return result
 
 
 def _next_best_action(intent: Intent, objection: Objection) -> str:

@@ -34,7 +34,13 @@ export interface AnalysisResponse {
   intent: Intent;
   sentiment: Sentiment;
   objection: Objection;
+  customer_summary: string;
+  customer_needs: string[];
+  risk_level: "low" | "medium" | "high";
+  opportunity: string;
   suggested_response: string;
+  agent_script: string[];
+  follow_up_questions: string[];
   next_best_action: string;
   confidence: number;
   compliance: ComplianceResult;

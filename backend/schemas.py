@@ -46,7 +46,13 @@ class AnalysisResponse(BaseModel):
     intent: Intent
     sentiment: Sentiment
     objection: Objection
+    customer_summary: str = ""
+    customer_needs: list[str] = Field(default_factory=list)
+    risk_level: Literal["low", "medium", "high"] = "medium"
+    opportunity: str = ""
     suggested_response: str
+    agent_script: list[str] = Field(default_factory=list)
+    follow_up_questions: list[str] = Field(default_factory=list)
     next_best_action: str
     confidence: float = Field(ge=0, le=1)
     compliance: ComplianceResult

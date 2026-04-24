@@ -8,7 +8,7 @@ import httpx
 from pydantic import ValidationError
 
 from backend.config import Settings
-from backend.schemas import AnalysisResponse, AnalyzeCallRequest, CallSummaryResponse
+from backend.schemas import AnalysisResponse, AnalyzeCallRequest, CallSummaryResponse, ComplianceResult
 
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class LLMAnalyzer:
             user_prompt=f"Mijoz xabari:\n{message}",
         )
         try:
-            return AnalysisResponse.model_validate(payload)
+            return _normalize_analysis(AnalysisResponse.model_validate(payload))
         except ValidationError as exc:
             raise LLMError(f"OpenAI analysis schema validation failed: {exc}") from exc
 
@@ -47,7 +47,8 @@ class LLMAnalyzer:
             user_prompt=f"Call transcript:\n{transcript}",
         )
         try:
-            return CallSummaryResponse.model_validate(response_payload)
+            summary = CallSummaryResponse.model_validate(response_payload)
+            return summary.model_copy(update={"compliance": _normalize_compliance(summary.compliance)})
         except ValidationError as exc:
             raise LLMError(f"OpenAI summary schema validation failed: {exc}") from exc
 
@@ -122,9 +123,35 @@ def _extract_output_text(payload: dict[str, Any]) -> str:
     return "".join(text_parts)
 
 
+def _normalize_analysis(response: AnalysisResponse) -> AnalysisResponse:
+    script = [line for line in response.agent_script if line.strip()]
+    if not script:
+        script = [response.suggested_response]
+
+    return response.model_copy(
+        update={
+            "agent_script": script,
+            "compliance": _normalize_compliance(response.compliance),
+        }
+    )
+
+
+def _normalize_compliance(compliance: ComplianceResult) -> ComplianceResult:
+    score = max(0, min(100, compliance.score))
+    status = "green" if score >= 80 else "yellow" if score >= 60 else "red"
+    return compliance.model_copy(update={"score": score, "status": status})
+
+
 ANALYSIS_SYSTEM_PROMPT = """
 Siz SQB bank call-markaz agenti uchun AI copilot tahlilchisiz.
-Faqat o'zbek tilida yozing. Javob agentga mijoz bilan ishlashda yordam berishi kerak.
+Bu chat-bot emas: mijozga bevosita yozishmang, agent uchun tahlil, tayyor script,
+keyingi savollar va compliance tavsiyalarini bering. Faqat o'zbek tilida yozing.
+agent_script ichidagi har bir element agent mijozga aynan o'qib beradigan tayyor gap bo'lsin.
+"Mijozni salomlashish", "shartlarni tushuntirish" kabi instruktsiya yozmang; tayyor jumla yozing.
+suggested_response bitta asosiy tayyor javob bo'lsin, reklama yoki ortiqcha va'da bermang.
+Aniq foiz stavkasi berilmagan bo'lsa stavka aytmang va "raqobatbardosh" deb va'da bermang.
+Kreditda "aniq hisob-kitob qilib ko'rsatamiz" va "umumiy to'lov bilan tanishing" mazmunini ishlating.
+compliance.score va compliance.status mos bo'lsin: 80-100 green, 60-79 yellow, 0-59 red.
 Bank compliance bo'yicha ehtiyotkor bo'ling: kreditda foiz stavkasi, umumiy to'lov,
 muddat va shaxsiy ma'lumotlar roziligi eslatilishi kerak. JSON schema'dan chetga chiqmang.
 """.strip()
@@ -174,7 +201,13 @@ ANALYSIS_SCHEMA = {
                 "none",
             ],
         },
+        "customer_summary": {"type": "string"},
+        "customer_needs": {"type": "array", "items": {"type": "string"}},
+        "risk_level": {"type": "string", "enum": ["low", "medium", "high"]},
+        "opportunity": {"type": "string"},
         "suggested_response": {"type": "string"},
+        "agent_script": {"type": "array", "items": {"type": "string"}},
+        "follow_up_questions": {"type": "array", "items": {"type": "string"}},
         "next_best_action": {"type": "string"},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "compliance": COMPLIANCE_SCHEMA,
@@ -184,7 +217,13 @@ ANALYSIS_SCHEMA = {
         "intent",
         "sentiment",
         "objection",
+        "customer_summary",
+        "customer_needs",
+        "risk_level",
+        "opportunity",
         "suggested_response",
+        "agent_script",
+        "follow_up_questions",
         "next_best_action",
         "confidence",
         "compliance",
