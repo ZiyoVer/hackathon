@@ -77,7 +77,7 @@ class AudioTranscriptionResponse(BaseModel):
 
 class TtsRequest(BaseModel):
     text: str = Field(min_length=2, max_length=2000)
-    voice: str = "uz-standard"
+    voice: Literal["gulnoza", "jaxongir", "uz-standard"] = "gulnoza"
 
 
 class TtsResponse(BaseModel):

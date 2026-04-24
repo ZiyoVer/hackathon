@@ -8,9 +8,16 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:5173"
 
     aisha_api_key: str = ""
-    aisha_api_base_url: str = ""
-    aisha_stt_path: str = "/stt"
-    aisha_tts_path: str = "/tts"
+    aisha_api_base_url: str = "https://back.aisha.group"
+    aisha_stt_path: str = "/api/v2/stt/post/"
+    aisha_stt_result_path: str = "/api/v2/stt/get/{id}/"
+    aisha_tts_path: str = "/api/v1/tts/post/"
+    aisha_tts_status_path: str = "/api/v1/tts/status/{id}/"
+    aisha_language: str = "uz"
+    aisha_tts_model: str = "gulnoza"
+    aisha_stt_has_diarization: bool = True
+    aisha_poll_attempts: int = 12
+    aisha_poll_interval_seconds: float = 2.0
 
     wasabi_endpoint_url: str = "https://s3.eu-central-1.wasabisys.com"
     wasabi_region: str = "eu-central-1"

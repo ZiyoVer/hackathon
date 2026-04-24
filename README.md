@@ -53,3 +53,18 @@ Railway env variables uchun `.env.example`dagi nomlardan foydalaning. Secret key
 - `POST /api/analyze-call`
 - `POST /api/audio/transcribe`
 - `POST /api/audio/synthesize`
+
+## Aisha AI integratsiya
+
+Aisha docs bo'yicha:
+
+- Base URL: `https://back.aisha.group`
+- STT upload: `POST /api/v2/stt/post/`
+- STT result: `GET /api/v2/stt/get/{id}/`
+- TTS: `POST /api/v1/tts/post/`
+- TTS status: `GET /api/v1/tts/status/{id}/`
+- Auth header: `x-api-key`
+- STT form fields: `audio`, `language=uz`, `has_diarization=true`
+- TTS form fields: `transcript`, `language=uz`, `model=gulnoza|jaxongir`
+
+API key lokal `.env` yoki Railway Variables ichida `AISHA_API_KEY` sifatida beriladi.
