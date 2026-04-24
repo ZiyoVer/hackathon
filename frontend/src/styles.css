@@ -82,6 +82,21 @@ input:disabled {
   white-space: nowrap;
 }
 
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.top-visual {
+  width: 136px;
+  height: 54px;
+  border: 1px solid #d5dcda;
+  border-radius: 8px;
+  object-fit: cover;
+  object-position: center;
+}
+
 .live-dot,
 .status-dot {
   display: inline-block;
@@ -853,6 +868,16 @@ input:disabled {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .top-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .top-visual {
+    width: 118px;
+    height: 46px;
   }
 
   .input-toolbar,

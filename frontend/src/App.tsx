@@ -256,9 +256,12 @@ function App() {
           <p className="eyebrow">SQB Call Center</p>
           <h1>Agent Assist Console</h1>
         </div>
-        <div className="status-pill">
-          <span className="live-dot" />
-          Real-time tahlil
+        <div className="top-actions">
+          <img alt="" className="top-visual" src="/images/call-center-copilot.jpg" />
+          <div className="status-pill">
+            <span className="live-dot" />
+            Real-time tahlil
+          </div>
         </div>
       </header>
 
