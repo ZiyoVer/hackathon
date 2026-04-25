@@ -9,6 +9,7 @@ import { createApiRouter } from "./routes/api.js";
 import { createVoiceRouter } from "./routes/voice.js";
 import { createCallSession, appendTranscript, saveCallSummary } from "./services/crm.js";
 import { GeminiLiveBridge } from "./services/geminiLive.js";
+import { allowVoiceStreamRequest, verifyStreamToken } from "./services/voiceSecurity.js";
 
 const app = express();
 app.set("trust proxy", true);
@@ -47,6 +48,12 @@ const twilioWss = new WebSocketServer({ noServer: true });
 server.on("upgrade", (request, socket, head) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
   if (url.pathname !== "/api/voice/twilio/stream") {
+    socket.destroy();
+    return;
+  }
+  const customerId = url.searchParams.get("customerId") || config.defaultCustomerId;
+  const remote = request.socket.remoteAddress ?? "unknown";
+  if (!verifyStreamToken(customerId, url.searchParams.get("token"), url.searchParams.get("ts")) || !allowVoiceStreamRequest(remote)) {
     socket.destroy();
     return;
   }

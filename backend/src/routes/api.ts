@@ -43,7 +43,7 @@ export function createApiRouter(): Router {
         },
         twilio_voice: {
           configured: twilioReady,
-          env: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"],
+          env: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "VOICE_WEBHOOK_SECRET", "VOICE_STREAM_SECRET"],
           note: twilioReady ? "Inbound/outbound telefon demo uchun credential bor." : "Twilio Voice account va raqam kerak."
         },
         public_tunnel: {

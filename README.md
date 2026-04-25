@@ -53,12 +53,14 @@ GEMINI_API_KEY="..."
 TWILIO_ACCOUNT_SID="..."
 TWILIO_AUTH_TOKEN="..."
 TWILIO_FROM_NUMBER="+1..."
+VOICE_WEBHOOK_SECRET="random-demo-secret"
+VOICE_STREAM_SECRET="another-random-demo-secret"
 ```
 
 Twilio Console ichida telefon raqamining Voice webhook URLini shunday qo'ying:
 
 ```text
-https://YOUR-NGROK.ngrok-free.app/api/voice/twilio?customerId=cust_001
+https://YOUR-NGROK.ngrok-free.app/api/voice/twilio?customerId=cust_001&secret=random-demo-secret
 ```
 
 Keyin telefoningizdan Twilio raqamiga qo'ng'iroq qiling. Twilio audio streamni:

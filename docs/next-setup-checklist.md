@@ -26,6 +26,8 @@ orqali beriladi. Kod `process.env.GEMINI_API_KEY`dan o'qiydi.
    - `TWILIO_ACCOUNT_SID`
    - `TWILIO_AUTH_TOKEN`
    - `TWILIO_FROM_NUMBER`
+   - `VOICE_WEBHOOK_SECRET`
+   - `VOICE_STREAM_SECRET`
    - Trial account bo'lsa, sizning telefon raqamingiz Verified Caller ID bo'lishi mumkin.
 
 4. CRM demo

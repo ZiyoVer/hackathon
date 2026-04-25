@@ -25,6 +25,10 @@ export const config = {
   twilioApiKeySid: process.env.TWILIO_API_KEY_SID ?? "",
   twilioApiKeySecret: process.env.TWILIO_API_KEY_SECRET ?? "",
   twilioFromNumber: process.env.TWILIO_FROM_NUMBER ?? "",
+  voiceWebhookSecret: process.env.VOICE_WEBHOOK_SECRET ?? "",
+  voiceStreamSecret: process.env.VOICE_STREAM_SECRET ?? "",
+  voiceStreamMaxAgeSeconds: numberFromEnv("VOICE_STREAM_MAX_AGE_SECONDS", 900),
+  voiceStreamRateLimitPerMinute: numberFromEnv("VOICE_STREAM_RATE_LIMIT_PER_MINUTE", 20),
   managerPassword: process.env.MANAGER_PASSWORD ?? "admin123",
   managerToken: process.env.MANAGER_TOKEN ?? "demo-manager-token",
   defaultCustomerId: process.env.DEFAULT_CUSTOMER_ID ?? "cust_001"

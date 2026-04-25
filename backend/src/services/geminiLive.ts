@@ -48,8 +48,7 @@ export class GeminiLiveBridge {
 
     const endpoint =
       "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
-    const url = `${endpoint}?key=${encodeURIComponent(config.geminiApiKey)}`;
-    this.gemini = new WebSocket(url, {
+    this.gemini = new WebSocket(endpoint, {
       headers: {
         "x-goog-api-key": config.geminiApiKey
       }
@@ -245,7 +244,7 @@ export class GeminiLiveBridge {
       const inlineData = part.inlineData ?? part.inline_data;
       const data = inlineData?.data;
       if (data) {
-        this.sendAudioToTwilio(data);
+        this.sendAudioToTwilio(data, readInlineMimeType(inlineData));
       }
     }
 
@@ -266,13 +265,13 @@ export class GeminiLiveBridge {
     }
   }
 
-  private sendAudioToTwilio(base64Pcm24: string): void {
+  private sendAudioToTwilio(base64Pcm: string, mimeType?: string): void {
     if (this.twilioSocket.readyState !== WebSocket.OPEN || !this.streamSid) {
       return;
     }
 
-    const pcm24 = Buffer.from(base64Pcm24, "base64");
-    const pcm8 = resamplePcm16(pcm24, 24000, 8000);
+    const pcm = Buffer.from(base64Pcm, "base64");
+    const pcm8 = resamplePcm16(pcm, parseAudioRate(mimeType) ?? 24000, 8000);
     const mulaw = pcm16ToMulaw(pcm8);
     this.twilioSocket.send(
       JSON.stringify({
@@ -301,4 +300,28 @@ export class GeminiLiveBridge {
   private sendTwilioLog(message: string): void {
     console.info(`[twilio:${this.callId}] ${message}`);
   }
+}
+
+function parseAudioRate(mimeType?: string): number | null {
+  if (!mimeType) {
+    return null;
+  }
+  const match = /rate=(\d+)/i.exec(mimeType);
+  if (!match) {
+    return null;
+  }
+  const rate = Number(match[1]);
+  return Number.isFinite(rate) && rate > 0 ? rate : null;
+}
+
+function readInlineMimeType(
+  inlineData?: { data?: string; mimeType?: string } | { data?: string; mime_type?: string }
+): string | undefined {
+  if (!inlineData) {
+    return undefined;
+  }
+  if ("mimeType" in inlineData) {
+    return inlineData.mimeType;
+  }
+  return (inlineData as { mime_type?: string }).mime_type;
 }
