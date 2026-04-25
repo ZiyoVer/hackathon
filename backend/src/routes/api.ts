@@ -27,6 +27,44 @@ export function createApiRouter(): Router {
     res.json(listDemoScenarios());
   });
 
+  router.get("/integrations/status", (_req, res) => {
+    const publicUrlReady = Boolean(config.publicBaseUrl && config.publicWsBaseUrl);
+    const geminiReady = Boolean(config.geminiApiKey);
+    const twilioReady = Boolean(config.twilioAccountSid && config.twilioAuthToken && config.twilioFromNumber);
+    const bitrixReady = Boolean(process.env.BITRIX24_WEBHOOK_URL);
+    res.json({
+      ready_for_web_demo: true,
+      ready_for_phone_demo: geminiReady && twilioReady && publicUrlReady,
+      integrations: {
+        gemini_live: {
+          configured: geminiReady,
+          env: "GEMINI_API_KEY",
+          note: geminiReady ? "Gemini Live server-side ishlatishga tayyor." : "Google AI Studio API key kerak."
+        },
+        twilio_voice: {
+          configured: twilioReady,
+          env: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"],
+          note: twilioReady ? "Inbound/outbound telefon demo uchun credential bor." : "Twilio Voice account va raqam kerak."
+        },
+        public_tunnel: {
+          configured: publicUrlReady,
+          env: ["PUBLIC_BASE_URL", "PUBLIC_WS_BASE_URL"],
+          note: publicUrlReady ? "Twilio webhook/WSS URL tayyor." : "ngrok, Cloudflare Tunnel yoki Railway public URL kerak."
+        },
+        bitrix24: {
+          configured: bitrixReady,
+          env: "BITRIX24_WEBHOOK_URL",
+          note: bitrixReady ? "CRM sync optional adapter yoqilgan." : "CRM sync hozir demo in-memory rejimida."
+        }
+      },
+      missing_for_phone_demo: [
+        !geminiReady ? "GEMINI_API_KEY" : "",
+        !twilioReady ? "TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_FROM_NUMBER" : "",
+        !publicUrlReady ? "PUBLIC_BASE_URL/PUBLIC_WS_BASE_URL" : ""
+      ].filter(Boolean)
+    });
+  });
+
   router.post("/analyze-message", (req, res) => {
     const message = readString(req.body?.message);
     if (!message) {

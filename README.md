@@ -85,6 +85,8 @@ endpointga yuboradi, backend esa Gemini Live bilan real-time agentni ulaydi.
 
 ## API keylar qayerdan olinadi
 
+API keylarni kodga yozmang va GitHubga commit qilmang. `.env`, Railway Variables yoki secret manager ishlating.
+
 ### Gemini
 
 1. `https://aistudio.google.com/app/apikey` ga kiring.
