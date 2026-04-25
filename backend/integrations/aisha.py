@@ -23,15 +23,22 @@ class AishaClient:
                 "mock",
             )
 
-        url = self._url(self.settings.aisha_stt_path)
-        files = {"audio": (filename, audio, content_type)}
-        data = {
-            "language": self.settings.aisha_language,
-            "has_diarization": str(self.settings.aisha_stt_has_diarization).lower(),
-        }
-
         async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(url, headers=self._headers(), files=files, data=data)
+            response = await self._upload_stt(
+                client=client,
+                audio=audio,
+                filename=filename,
+                content_type=content_type,
+                has_diarization=self.settings.aisha_stt_has_diarization,
+            )
+            if self.settings.aisha_stt_has_diarization and self._is_short_diarization_error(response):
+                response = await self._upload_stt(
+                    client=client,
+                    audio=audio,
+                    filename=filename,
+                    content_type=content_type,
+                    has_diarization=False,
+                )
             self._raise_for_status(response, "Aisha STT upload")
             data = response.json()
 
@@ -41,6 +48,36 @@ class AishaClient:
 
         confidence = float(data.get("confidence") or 0.9)
         return transcript, confidence, "aisha"
+
+    async def _upload_stt(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        audio: bytes,
+        filename: str,
+        content_type: str,
+        has_diarization: bool,
+    ) -> httpx.Response:
+        files = {"audio": (filename, audio, content_type)}
+        data = {
+            "language": self.settings.aisha_language,
+            "has_diarization": str(has_diarization).lower(),
+        }
+        return await client.post(
+            self._url(self.settings.aisha_stt_path),
+            headers=self._headers(),
+            files=files,
+            data=data,
+        )
+
+    def _is_short_diarization_error(self, response: httpx.Response) -> bool:
+        if response.status_code != 400:
+            return False
+        try:
+            payload = response.json()
+        except ValueError:
+            return False
+        return payload.get("error_key") == "diarization_audio_too_short"
 
     async def synthesize(self, text: str, voice: str) -> tuple[bytes | None, str | None, str]:
         if not self.settings.has_aisha:
