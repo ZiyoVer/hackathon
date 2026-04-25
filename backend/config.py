@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     aisha_tts_status_path: str = "/api/v1/tts/status/{id}/"
     aisha_language: str = "uz"
     aisha_tts_model: str = "gulnoza"
-    aisha_stt_has_diarization: bool = False
+    aisha_stt_has_diarization: bool = True
     aisha_poll_attempts: int = 12
     aisha_poll_interval_seconds: float = 2.0
 

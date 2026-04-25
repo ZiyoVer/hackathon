@@ -77,8 +77,7 @@ Aisha docs bo'yicha:
 - TTS: `POST /api/v1/tts/post/`
 - TTS status: `GET /api/v1/tts/status/{id}/`
 - Auth header: `x-api-key`
-- STT form fields: `audio`, `language=uz`, `has_diarization=false` by default.
-  If diarization is enabled and Aisha rejects short audio, the backend retries once without diarization.
+- STT form fields: `audio`, `language=uz`, `has_diarization=true`
 - TTS form fields: `transcript`, `language=uz`, `model=gulnoza|jaxongir`
 
 API key lokal `.env` yoki Railway Variables ichida `AISHA_API_KEY` sifatida beriladi.
