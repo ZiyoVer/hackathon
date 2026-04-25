@@ -13,18 +13,23 @@
           <span class="pulse"></span>
           <span id="modeLabel">Copilot</span>
         </div>
+        <div class="mode-switch">
+          <button id="copilotModeBtn" class="active">Copilot</button>
+          <button id="agentModeBtn">Agent</button>
+        </div>
         <span id="apiStatus" class="quiet-status">checking</span>
       </header>
 
       <section class="whisper">
         <span id="intentValue" class="context-label">Live assist</span>
         <strong id="primarySuggestion">Mijoz gapini eshitishga tayyor.</strong>
-        <p id="reasonLine">Cmd/Ctrl + Enter yordam chaqiradi. Cmd/Ctrl + 1/2 rejimni almashtiradi.</p>
+        <p id="reasonLine">Pastdagi sokin tugmalar orqali eshitish, tahlil va rejimni boshqaring.</p>
       </section>
 
       <section class="signal-line">
         <span id="riskValue">Risk: -</span>
         <span id="complianceValue">Compliance: -</span>
+        <span id="listenStatus">Mic: idle</span>
       </section>
 
       <section class="transcript-fade">
@@ -33,8 +38,16 @@
       </section>
 
       <section class="quiet-list">
+        <span class="section-kicker">Whisper script</span>
         <ul id="scriptList">
           <li>Operatorga qisqa maslahat shu yerda chiqadi.</li>
+        </ul>
+      </section>
+
+      <section class="knowledge-card">
+        <span class="section-kicker">Knowledge base</span>
+        <ul id="knowledgeList">
+          <li>CRM va bank qoidalaridan mos dalillar shu yerda chiqadi.</li>
         </ul>
       </section>
 
@@ -46,12 +59,11 @@
       </section>
 
       <section class="ambient-actions">
+        <button id="listenBtn">listen</button>
         <button data-scenario="fraud">fraud</button>
         <button data-scenario="credit">credit</button>
         <button data-scenario="complaint">issue</button>
         <button id="assistBtn">assist</button>
-        <button id="ticketBtn">ticket</button>
-        <button id="summaryBtn">summary</button>
         <button id="hideBtn">hide</button>
       </section>
 

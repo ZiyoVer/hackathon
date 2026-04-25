@@ -1,8 +1,11 @@
 const path = require("node:path");
+const { spawn } = require("node:child_process");
 const { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } = require("electron");
 
 let overlayWindow = null;
 let clickThrough = false;
+let backendProcess = null;
+let backendAutoStarted = false;
 
 function createOverlayWindow() {
   const display = screen.getPrimaryDisplay();
@@ -41,7 +44,8 @@ function createOverlayWindow() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await ensureBackendServer();
   createOverlayWindow();
 
   globalShortcut.register("CommandOrControl+Shift+Space", () => {
@@ -78,10 +82,15 @@ app.whenReady().then(() => {
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  if (backendProcess) {
+    backendProcess.kill();
+    backendProcess = null;
+  }
 });
 
 ipcMain.handle("overlay:get-config", () => ({
-  apiBaseUrl: process.env.API_BASE_URL || "http://localhost:8080"
+  apiBaseUrl: process.env.API_BASE_URL || "http://localhost:8080",
+  backendAutoStarted
 }));
 
 ipcMain.handle("overlay:open-url", async (_event, url) => {
@@ -95,3 +104,39 @@ ipcMain.on("overlay:resize-mode", (_event, mode) => {
   if (mode === "compact") overlayWindow.setSize(360, 280);
   if (mode === "expanded") overlayWindow.setSize(420, 720);
 });
+
+async function ensureBackendServer() {
+  const apiBaseUrl = process.env.API_BASE_URL || "http://localhost:8080";
+  const healthy = await checkHealth(apiBaseUrl);
+  if (healthy || process.env.OVERLAY_AUTO_START_API === "false") {
+    return;
+  }
+
+  const repoRoot = path.resolve(__dirname, "../../../..");
+  backendProcess = spawn("npm", ["--prefix", "backend", "run", "dev"], {
+    cwd: repoRoot,
+    env: { ...process.env },
+    stdio: "pipe"
+  });
+  backendAutoStarted = true;
+
+  backendProcess.stdout.on("data", (chunk) => {
+    console.info(`[api] ${chunk.toString().trim()}`);
+  });
+  backendProcess.stderr.on("data", (chunk) => {
+    console.warn(`[api] ${chunk.toString().trim()}`);
+  });
+  backendProcess.on("exit", () => {
+    backendProcess = null;
+    backendAutoStarted = false;
+  });
+}
+
+async function checkHealth(apiBaseUrl) {
+  try {
+    const response = await fetch(`${apiBaseUrl}/health`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}

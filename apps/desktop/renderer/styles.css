@@ -29,6 +29,7 @@ button {
 }
 
 .overlay-shell {
+  -webkit-app-region: drag;
   width: calc(100vw - 18px);
   height: calc(100vh - 18px);
   margin: 9px;
@@ -53,10 +54,10 @@ button {
 }
 
 .drag-zone {
-  -webkit-app-region: drag;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   min-height: 28px;
 }
 
@@ -71,6 +72,32 @@ footer span {
   font-size: 11px;
   font-weight: 760;
   padding: 6px 9px;
+}
+
+.mode-switch {
+  -webkit-app-region: no-drag;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 128px;
+  border: 1px solid rgba(230, 255, 251, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 2px;
+}
+
+.mode-switch button {
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(229, 247, 244, 0.52);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.mode-switch button.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .identity {
@@ -102,7 +129,8 @@ footer span {
 
 .context-label,
 .quiet-warning span,
-.transcript-fade label {
+.transcript-fade label,
+.section-kicker {
   color: rgba(193, 221, 217, 0.58);
   font-size: 11px;
   font-weight: 850;
@@ -142,6 +170,7 @@ footer span {
 }
 
 textarea {
+  -webkit-app-region: no-drag;
   width: 100%;
   min-height: 78px;
   resize: vertical;
@@ -155,7 +184,8 @@ textarea {
 }
 
 .quiet-list,
-.quiet-warning {
+.quiet-warning,
+.knowledge-card {
   display: grid;
   gap: 7px;
   border-radius: 16px;
@@ -165,6 +195,10 @@ textarea {
 
 .quiet-warning {
   border: 1px solid rgba(255, 202, 118, 0.12);
+}
+
+.knowledge-card {
+  border: 1px solid rgba(125, 180, 255, 0.12);
 }
 
 ul {
@@ -181,8 +215,9 @@ li {
 }
 
 .ambient-actions {
+  -webkit-app-region: no-drag;
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 5px;
   opacity: 0.08;
   transition: opacity 160ms ease;
@@ -194,6 +229,7 @@ li {
 }
 
 .ambient-actions button {
+  -webkit-app-region: no-drag;
   min-width: 0;
   height: 24px;
   border: 1px solid rgba(230, 255, 251, 0.08);
@@ -207,4 +243,8 @@ li {
 footer {
   margin-top: auto;
   display: flex;
+}
+
+button {
+  -webkit-app-region: no-drag;
 }

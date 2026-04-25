@@ -33,10 +33,18 @@ const fallbackByIntent = {
 const $ = (id) => document.getElementById(id);
 let apiBaseUrl = "http://localhost:8080";
 let mode = "copilot";
+let recognition = null;
+let isListening = false;
+let backendAutoStarted = false;
 
 window.bankOverlay.getConfig().then((config) => {
   apiBaseUrl = config.apiBaseUrl || apiBaseUrl;
+  backendAutoStarted = Boolean(config.backendAutoStarted);
+  if (backendAutoStarted) {
+    $("apiStatus").textContent = "API starting";
+  }
   checkApi();
+  setInterval(checkApi, 3000);
 });
 
 window.bankOverlay.onAssist(() => {
@@ -53,12 +61,9 @@ window.bankOverlay.onClickThrough((enabled) => {
 
 $("hideBtn").addEventListener("click", () => window.bankOverlay.hide());
 $("assistBtn").addEventListener("click", () => void runAssist());
-$("ticketBtn").addEventListener("click", () => {
-  $("crmLine").textContent = "CRM: ticket yaratildi, status in_progress, fraud/support bo'limiga yuborildi.";
-});
-$("summaryBtn").addEventListener("click", () => {
-  $("crmLine").textContent = "CRM summary: mijoz muammo bildirdi, keyingi qadam belgilandi, operator tasdiqlashi kerak.";
-});
+$("listenBtn").addEventListener("click", () => toggleListening());
+$("copilotModeBtn").addEventListener("click", () => setMode("copilot"));
+$("agentModeBtn").addEventListener("click", () => setMode("agent"));
 
 document.querySelectorAll("[data-scenario]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -71,9 +76,9 @@ document.querySelectorAll("[data-scenario]").forEach((button) => {
 async function checkApi() {
   try {
     const response = await fetch(`${apiBaseUrl}/health`);
-    $("apiStatus").textContent = response.ok ? "API online" : "API offline";
+    $("apiStatus").textContent = response.ok ? "API online" : backendAutoStarted ? "API starting" : "API offline";
   } catch {
-    $("apiStatus").textContent = "API offline";
+    $("apiStatus").textContent = backendAutoStarted ? "API starting" : "API offline";
   }
 }
 
@@ -112,6 +117,8 @@ function renderAnalysis(analysis) {
       : analysis.next_best_action || "CRM kontekstga qarab javob berish kerak.";
   renderList("scriptList", analysis.agent_script || [analysis.suggested_response]);
   renderList("warningList", analysis.do_not_say || ["OTP, PIN, CVV so'ramang."]);
+  renderKnowledge(analysis);
+  renderCrmAction(analysis);
 }
 
 function renderFallback(message) {
@@ -131,16 +138,79 @@ function renderFallback(message) {
       : "API offline bo'lgani uchun local fallback ishladi.";
   renderList("scriptList", data.script);
   renderList("warningList", data.warnings);
+  renderList("knowledgeList", [
+    intent === "complaint" ? "Shikoyat: ticket, SLA va mas'ul departament ko'rsatiladi." : "Kredit: skoring va disclosure qoidalari ishlaydi.",
+    "Mock CRM: mijoz segmenti va risk darajasi tahlilga qo'shiladi."
+  ]);
 }
 
 function setMode(nextMode) {
   mode = nextMode;
   document.querySelector(".overlay-shell").dataset.mode = mode;
   $("modeLabel").textContent = mode === "agent" ? "AI Call Agent" : "Copilot";
+  $("copilotModeBtn").classList.toggle("active", mode === "copilot");
+  $("agentModeBtn").classList.toggle("active", mode === "agent");
   $("reasonLine").textContent =
     mode === "agent"
       ? "Agent mijoz bilan gaplashadi; overlay faqat holat va riskni ko'rsatadi."
       : "Operator gaplashadi; overlay shivir sifatida keyingi gapni beradi.";
+}
+
+function toggleListening() {
+  if (isListening) {
+    stopListening();
+    return;
+  }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    $("listenStatus").textContent = "Mic: not supported";
+    $("reasonLine").textContent = "Bu Chromium build live speech recognition bermadi; hozir transcript maydoniga matn tushiring.";
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.lang = "uz-UZ";
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.onstart = () => {
+    isListening = true;
+    $("listenStatus").textContent = "Mic: listening";
+    $("listenBtn").textContent = "stop";
+  };
+  recognition.onerror = () => {
+    stopListening();
+    $("listenStatus").textContent = "Mic: error";
+  };
+  recognition.onend = () => {
+    if (isListening) {
+      recognition.start();
+    }
+  };
+  recognition.onresult = (event) => {
+    let finalText = "";
+    let interimText = "";
+    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      const text = event.results[i][0].transcript;
+      if (event.results[i].isFinal) finalText += text;
+      else interimText += text;
+    }
+    const value = `${$("liveInput").value}\n${finalText || interimText}`.trim();
+    $("liveInput").value = value;
+    if (finalText.trim()) {
+      void runAssist();
+    }
+  };
+  recognition.start();
+}
+
+function stopListening() {
+  isListening = false;
+  $("listenStatus").textContent = "Mic: idle";
+  $("listenBtn").textContent = "listen";
+  if (recognition) {
+    recognition.stop();
+    recognition = null;
+  }
 }
 
 function buildAgentLine(analysis) {
@@ -161,6 +231,26 @@ function renderList(id, items) {
     li.textContent = item;
     list.appendChild(li);
   });
+}
+
+function renderKnowledge(analysis) {
+  const references = analysis.product_references || [];
+  const items = references.length
+    ? references.map((item) => `${item.title}: ${item.script_anchor || item.why_it_matters}`)
+    : analysis.knowledge_refs || ["Knowledge base mos yozuv topmadi."];
+  renderList("knowledgeList", items);
+}
+
+function renderCrmAction(analysis) {
+  if (analysis.intent === "complaint") {
+    $("crmLine").textContent = "CRM: ticket tayyor, status in_progress, mas'ul bo'limga routing.";
+    return;
+  }
+  if (analysis.intent === "credit_request") {
+    $("crmLine").textContent = "CRM: lead warm, kredit karta + sug'urta follow-up tavsiya qilindi.";
+    return;
+  }
+  $("crmLine").textContent = "CRM: summary va keyingi qadam avtomatik tayyorlanadi.";
 }
 
 function labelIntent(intent) {
