@@ -137,6 +137,7 @@ function renderAnalysis(analysis) {
   renderList("warningList", analysis.do_not_say || ["OTP, PIN, CVV so'ramang."]);
   renderKnowledge(analysis);
   renderCrmAction(analysis);
+  renderAgentState(analysis);
 }
 
 function renderFallback(message) {
@@ -160,6 +161,7 @@ function renderFallback(message) {
     intent === "complaint" ? "Shikoyat: ticket, SLA va mas'ul departament ko'rsatiladi." : "Kredit: skoring va disclosure qoidalari ishlaydi.",
     "Mock CRM: mijoz segmenti va risk darajasi tahlilga qo'shiladi."
   ]);
+  renderAgentState({ intent, risk_level: intent === "complaint" ? "high" : "medium" });
 }
 
 function setMode(nextMode) {
@@ -172,6 +174,11 @@ function setMode(nextMode) {
     mode === "agent"
       ? "Agent mijoz bilan gaplashadi; overlay faqat holat va riskni ko'rsatadi."
       : "Operator gaplashadi; overlay faqat aytiladigan javobni beradi.";
+  if (mode === "agent") {
+    $("agentStatus").textContent = "AI agent faol";
+    $("agentSubline").textContent = "Mijoz ovozi tinglanyapti";
+    $("agentCrmState").textContent = "CRM actionlar va summary orqa fonda tayyorlanadi.";
+  }
   queueRealtimeAssist(80);
 }
 
@@ -277,6 +284,25 @@ function renderCrmAction(analysis) {
     return;
   }
   $("crmLine").textContent = "CRM: summary va keyingi qadam avtomatik tayyorlanadi.";
+}
+
+function renderAgentState(analysis) {
+  if (mode !== "agent") return;
+  if (analysis.intent === "complaint") {
+    $("agentStatus").textContent = "Shikoyat qabul qilinyapti";
+    $("agentSubline").textContent = "Agent mijozni tinglayapti va ticket tayyorlayapti";
+    $("agentCrmState").textContent = "CRM: in_progress, support routing, SLA eslatmasi.";
+    return;
+  }
+  if (analysis.intent === "credit_request") {
+    $("agentStatus").textContent = "Kredit suhbati ketmoqda";
+    $("agentSubline").textContent = "Agent skoring va disclosure qoidalarini ushlab turibdi";
+    $("agentCrmState").textContent = "CRM: lead warm, follow-up va next-best-offer.";
+    return;
+  }
+  $("agentStatus").textContent = "AI agent gaplashyapti";
+  $("agentSubline").textContent = "Mijoz niyati aniqlanmoqda";
+  $("agentCrmState").textContent = `CRM: ${labelRisk(analysis.risk_level)} risk, summary fon rejimida.`;
 }
 
 function labelIntent(intent) {
