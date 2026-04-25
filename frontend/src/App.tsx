@@ -14,6 +14,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { apiGet, apiPost, apiUpload } from "./lib/api";
+import { ManagerView } from "./ManagerView";
 import type {
   AnalysisResponse,
   AudioTranscriptionResponse,
@@ -107,6 +108,46 @@ function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [mode, setMode] = useState<"operator" | "manager">(() =>
+    typeof window !== "undefined" && window.location.hash === "#manager" ? "manager" : "operator",
+  );
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [activeOperator] = useState("op1");
+
+  useEffect(() => {
+    const onHash = () => {
+      setMode(window.location.hash === "#manager" ? "manager" : "operator");
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const ensureSession = async (): Promise<string | null> => {
+    if (sessionId) return sessionId;
+    try {
+      const created = await apiPost<
+        { operator_id: string; customer_label: string },
+        { id: string }
+      >("/api/sessions", {
+        operator_id: activeOperator,
+        customer_label: "Mijoz #" + Math.floor(Math.random() * 1000),
+      });
+      setSessionId(created.id);
+      return created.id;
+    } catch {
+      return null;
+    }
+  };
+
+  const pushToSession = async (text: string, speaker: "customer" | "agent" = "customer") => {
+    const sid = await ensureSession();
+    if (!sid) return;
+    try {
+      await apiPost(`/api/sessions/${sid}/messages`, { speaker, text });
+    } catch {
+      /* ignore */
+    }
+  };
 
   useEffect(() => {
     apiGet<DemoScenario[]>("/api/demo-scenarios")
@@ -175,6 +216,7 @@ function App() {
         message: value
       });
       setAnalysis(result);
+      void pushToSession(value, "customer");
     } catch (caught: unknown) {
       setError(getErrorMessage(caught));
     } finally {
@@ -257,6 +299,10 @@ function App() {
     }
   };
 
+  if (mode === "manager") {
+    return <ManagerView />;
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -264,9 +310,20 @@ function App() {
           <p className="eyebrow">SQB Bank aloqa markazi</p>
           <h1>SQB mijoz tahlili</h1>
         </div>
-        <div className="status-pill">
-          <span className="live-dot" />
-          Jonli tahlil
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <button
+            className="mode-toggle"
+            type="button"
+            onClick={() => {
+              window.location.hash = "manager";
+            }}
+          >
+            Manager rejimi
+          </button>
+          <div className="status-pill">
+            <span className="live-dot" />
+            Jonli tahlil
+          </div>
         </div>
       </header>
 

@@ -858,3 +858,77 @@ input:disabled {
     gap: 3px;
   }
 }
+
+/* === Manager Dashboard === */
+.manager-shell { padding: 24px 32px; min-height: 100vh; background: #f8fafc; }
+.manager-header { display: flex; justify-content: space-between; align-items: end; margin-bottom: 24px; }
+.manager-header h1 { margin: 4px 0 0; }
+.manager-stats { display: flex; gap: 18px; }
+.manager-stats > div { background: white; border-radius: 12px; padding: 12px 18px; display: flex; gap: 8px; align-items: center; box-shadow: 0 1px 3px rgba(15,23,42,.06); }
+.manager-stats > div strong { font-size: 22px; margin-left: 4px; }
+.manager-stats .stat-urgent { background: #fee2e2; color: #b91c1c; }
+.manager-stats .stat-negative { background: #fef3c7; color: #92580a; }
+
+.operator-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.op-card { text-align: left; background: white; border: 2px solid #e5e7eb; border-radius: 16px; padding: 18px; cursor: pointer; transition: transform .15s; font-family: inherit; }
+.op-card:hover { transform: translateY(-2px); }
+.op-card--high { border-color: #ef4444; box-shadow: 0 4px 16px rgba(239,68,68,.15); }
+.op-card--medium { border-color: #f59e0b; }
+.op-card--low { border-color: #10b981; }
+.op-card--alert { animation: pulse 1.4s infinite; }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.4); }
+  50% { box-shadow: 0 0 0 12px rgba(239,68,68,0); }
+}
+.op-card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.op-avatar { width: 42px; height: 42px; border-radius: 50%; background: #1e293b; color: white; display: grid; place-items: center; font-weight: 700; flex-shrink: 0; }
+.op-card-top > div:nth-child(2) { flex: 1; display: flex; flex-direction: column; }
+.op-card-top span { color: #64748b; font-size: 13px; }
+.risk-badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.risk-badge--high { background: #fee2e2; color: #b91c1c; }
+.risk-badge--medium { background: #fef3c7; color: #92580a; }
+.risk-badge--low { background: #d1fae5; color: #047857; }
+.op-card-summary { color: #334155; font-size: 14px; line-height: 1.4; margin: 8px 0 12px; }
+.op-card-foot { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; }
+.op-card-foot span { display: flex; align-items: center; gap: 4px; }
+.tone { padding: 2px 8px; border-radius: 6px; }
+.tone--negative { background: #fee2e2; color: #b91c1c; }
+.tone--neutral { background: #f1f5f9; }
+.tone--positive { background: #d1fae5; color: #047857; }
+.empty-state { color: #94a3b8; padding: 40px; text-align: center; grid-column: 1 / -1; }
+
+/* Drawer */
+.drawer { position: fixed; inset: 0; background: rgba(15,23,42,.4); display: flex; justify-content: flex-end; z-index: 50; }
+.drawer-panel { width: min(560px, 100%); background: white; height: 100%; padding: 24px; overflow-y: auto; }
+.drawer-panel header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; border: none; padding: 0; }
+.drawer-panel header button { background: transparent; border: none; font-size: 18px; cursor: pointer; color: #64748b; }
+.drawer-summary { background: #f8fafc; padding: 14px; border-radius: 12px; margin-bottom: 16px; }
+.drawer-summary .risk-badge { display: inline-block; margin-bottom: 8px; }
+.escalation-box { margin-top: 12px; background: #fef2f2; border-left: 3px solid #ef4444; padding: 10px 12px; border-radius: 8px; }
+.escalation-box strong { color: #b91c1c; display: block; margin-bottom: 4px; }
+.drawer-transcript { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+.bubble { padding: 10px 14px; border-radius: 10px; max-width: 85%; }
+.bubble--customer { background: #f1f5f9; align-self: flex-start; }
+.bubble--agent { background: #dbeafe; align-self: flex-end; }
+.bubble span { font-size: 11px; color: #64748b; display: block; margin-bottom: 4px; }
+.bubble p { margin: 0; }
+.drawer-panel footer { padding-top: 16px; border-top: 1px solid #e5e7eb; }
+.drawer-panel footer button { padding: 10px 18px; background: #1e293b; color: white; border: none; border-radius: 8px; cursor: pointer; }
+
+.mode-toggle { padding: 8px 16px; border-radius: 8px; background: #1e293b; color: white; border: none; cursor: pointer; font-family: inherit; font-size: 14px; }
+.mode-toggle:hover { background: #0f172a; }
+
+/* === Manager Login === */
+.login-shell { display: grid; place-items: center; min-height: 100vh; background: #f8fafc; }
+.login-card { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 8px 24px rgba(15,23,42,.08); width: 360px; display: flex; flex-direction: column; gap: 14px; }
+.login-icon { width: 56px; height: 56px; border-radius: 50%; background: #1e293b; color: white; display: grid; place-items: center; margin: 0 auto; }
+.login-card h2 { text-align: center; margin: 8px 0 0; }
+.login-card p { text-align: center; color: #64748b; font-size: 14px; margin: 0 0 8px; }
+.login-card input { padding: 12px 14px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 15px; font-family: inherit; }
+.login-card input:focus { outline: 2px solid #1e293b; outline-offset: -1px; }
+.login-card button { padding: 12px; border-radius: 8px; background: #1e293b; color: white; border: none; cursor: pointer; font-size: 15px; font-family: inherit; }
+.login-card button:disabled { opacity: 0.5; cursor: not-allowed; }
+.login-card code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+.login-error { color: #b91c1c; font-size: 13px; text-align: center; }
+.logout-btn { background: white; border: 1px solid #cbd5e1; padding: 8px 14px; border-radius: 8px; cursor: pointer; color: #64748b; font-family: inherit; display: flex; align-items: center; gap: 6px; }
+.logout-btn:hover { background: #f1f5f9; }

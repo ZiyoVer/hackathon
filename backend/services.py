@@ -230,7 +230,14 @@ def _normalize(text: str) -> str:
 
 
 def _detect_intent(text: str) -> Intent:
-    if _contains(text, ["shikoyat", "muammo", "norozi", "xato yechildi", "bloklandi"]):
+    if _contains(
+        text,
+        [
+            "shikoyat", "muammo", "norozi", "xato yechildi", "bloklandi",
+            "tushmagan", "yetib kelmagan", "yo'qoldi", "rasvo", "yaroqsiz",
+            "jalab", "jalba", "murojaat qilaman", "sudga",
+        ],
+    ):
         return "complaint"
     if _contains(text, ["kredit", "qarz", "foiz", "oylik to'lov", "50 million", "mln"]):
         return "credit_request"
@@ -258,8 +265,17 @@ def _detect_objection(text: str) -> Objection:
 
 
 def _detect_sentiment(text: str, objection: Objection) -> Sentiment:
-    if objection != "none" or _contains(text, ["norozi", "qimmat", "muammo", "xavotir"]):
-        return "negative" if _contains(text, ["norozi", "muammo", "ishonmayman"]) else "neutral"
+    strong_negative = [
+        "rasvo", "yaroqsiz", "jahlim", "uyalmaysiz", "aldadingiz", "aldab",
+        "qo'pol", "hurmatsiz", "norozi", "ishonmayman", "tushmagan",
+        "yo'qoldi", "yo'qotdingiz", "jalab", "jalba", "shikoyat qilaman", "sudga",
+    ]
+    if _contains(text, strong_negative):
+        return "negative"
+    if _contains(text, ["muammo", "xavotir", "qiynalyapman"]):
+        return "negative"
+    if objection != "none" or _contains(text, ["qimmat"]):
+        return "neutral"
     if _contains(text, ["rahmat", "yaxshi", "ma'qul", "zo'r"]):
         return "positive"
     return "neutral"

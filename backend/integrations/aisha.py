@@ -23,24 +23,56 @@ class AishaClient:
                 "mock",
             )
 
+        async with httpx.AsyncClient(timeout=60) as client:
+            transcript, confidence, ok = await self._stt_attempt(
+                client, audio, filename, content_type,
+                has_diarization=self.settings.aisha_stt_has_diarization,
+            )
+            if ok:
+                return transcript, confidence, "aisha"
+
+            transcript, confidence, ok = await self._stt_attempt(
+                client, audio, filename, content_type,
+                has_diarization=False,
+            )
+            if ok:
+                return transcript, confidence, "aisha"
+
+            raise AishaError("Aisha STT diarization'siz ham muvaffaqiyatsiz.")
+
+    async def _stt_attempt(
+        self,
+        client: httpx.AsyncClient,
+        audio: bytes,
+        filename: str,
+        content_type: str,
+        has_diarization: bool,
+    ) -> tuple[str, float, bool]:
         url = self._url(self.settings.aisha_stt_path)
         files = {"audio": (filename, audio, content_type)}
-        data = {
+        form = {
             "language": self.settings.aisha_language,
-            "has_diarization": str(self.settings.aisha_stt_has_diarization).lower(),
+            "has_diarization": str(has_diarization).lower(),
         }
+        response = await client.post(url, headers=self._headers(), files=files, data=form)
 
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(url, headers=self._headers(), files=files, data=data)
-            self._raise_for_status(response, "Aisha STT upload")
-            data = response.json()
+        if response.status_code == 400:
+            try:
+                err = response.json()
+            except Exception:
+                err = {}
+            if err.get("error_key") == "diarization_audio_too_short":
+                return "", 0.0, False
+            raise AishaError(f"Aisha STT failed: 400 {response.text[:300]}")
 
-            transcript = str(data.get("transcript") or data.get("text") or "")
-            if not transcript and data.get("id") is not None:
-                transcript = await self._poll_stt_result(client, int(data["id"]))
+        self._raise_for_status(response, "Aisha STT upload")
+        payload = response.json()
 
-        confidence = float(data.get("confidence") or 0.9)
-        return transcript, confidence, "aisha"
+        transcript = str(payload.get("transcript") or payload.get("text") or "")
+        if not transcript and payload.get("id") is not None:
+            transcript = await self._poll_stt_result(client, int(payload["id"]))
+        confidence = float(payload.get("confidence") or 0.9)
+        return transcript, confidence, True
 
     async def synthesize(self, text: str, voice: str) -> tuple[bytes | None, str | None, str]:
         if not self.settings.has_aisha:

@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     wasabi_secret_access_key: str = ""
     wasabi_public_base_url: str = ""
 
+    manager_password: str = "sqb2026"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     @property
