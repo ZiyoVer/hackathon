@@ -1,5 +1,17 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { AlertTriangle, Lock, LogOut, Phone, Shield, Users } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  AlertTriangle,
+  Clock3,
+  FileText,
+  Lock,
+  LogOut,
+  MessageSquareText,
+  Phone,
+  Server,
+  Shield,
+  Users,
+  Zap,
+} from "lucide-react";
 import {
   apiGetManager,
   apiPostManager,
@@ -10,6 +22,7 @@ import {
 type RiskLevel = "low" | "medium" | "high";
 type Sentiment = "positive" | "neutral" | "negative";
 type Priority = "normal" | "attention" | "urgent";
+type Speaker = "customer" | "agent";
 
 type SessionCard = {
   id: string;
@@ -27,13 +40,17 @@ type SessionCard = {
 };
 
 type SessionDetail = SessionCard & {
-  transcript: { speaker: "customer" | "agent"; text: string }[];
+  transcript: { speaker: Speaker; text: string }[];
   last_analysis: {
+    analysis_mode?: "rules" | "openai";
+    confidence?: number;
     customer_summary?: string;
+    next_best_action?: string;
     suggested_response?: string;
     agent_script?: string[];
     follow_up_questions?: string[];
     do_not_say?: string[];
+    closing_line?: string;
     escalation_packet?: {
       should_escalate: boolean;
       reason: string;
@@ -44,6 +61,27 @@ type SessionDetail = SessionCard & {
 };
 
 const RISK_RANK: Record<RiskLevel, number> = { high: 0, medium: 1, low: 2 };
+const riskLabels: Record<RiskLevel, string> = { high: "Yuqori", medium: "O'rta", low: "Past" };
+const sentimentLabels: Record<Sentiment, string> = {
+  positive: "Ijobiy",
+  neutral: "Neytral",
+  negative: "Salbiy",
+};
+
+type TranscriptTurn = {
+  end?: number;
+  rawSpeaker?: string;
+  speaker: Speaker;
+  start?: number;
+  text: string;
+};
+
+type RawTranscriptSegment = {
+  end?: unknown;
+  speaker?: unknown;
+  start?: unknown;
+  text?: unknown;
+};
 
 export function ManagerView() {
   const [authed, setAuthed] = useState<boolean>(() => !!getManagerToken());
@@ -183,6 +221,21 @@ function ManagerDashboard({ onLogout }: { onLogout: () => void }) {
         </div>
       </header>
 
+      <section className="manager-mode-strip" aria-label="Monitoring rejimi">
+        <span>
+          <FileText size={15} />
+          Demo transcript
+        </span>
+        <span>
+          <Zap size={15} />
+          Real-time target: &lt;1s
+        </span>
+        <span>
+          <Server size={15} />
+          Gemma 4 offline fallback
+        </span>
+      </section>
+
       <section className="operator-grid">
         {cards.map((card) => (
           <button
@@ -200,11 +253,7 @@ function ManagerDashboard({ onLogout }: { onLogout: () => void }) {
                 <span>{card.customer_label}</span>
               </div>
               <span className={`risk-badge risk-badge--${card.risk_level}`}>
-                {card.risk_level === "high"
-                  ? "Yuqori"
-                  : card.risk_level === "medium"
-                  ? "O'rta"
-                  : "Past"}
+                {riskLabels[card.risk_level]}
               </span>
             </div>
             <p className="op-card-summary">
@@ -215,7 +264,7 @@ function ManagerDashboard({ onLogout }: { onLogout: () => void }) {
                 <Phone size={13} /> {card.message_count} xabar
               </span>
               <span className={`tone tone--${card.sentiment}`}>
-                {card.sentiment}
+                {sentimentLabels[card.sentiment]}
               </span>
             </div>
           </button>
@@ -243,6 +292,12 @@ function SessionDrawer({
   onClose: () => void;
 }) {
   const [detail, setDetail] = useState<SessionDetail | null>(null);
+  const transcriptTurns = useMemo(
+    () => (detail ? buildTranscriptTurns(detail.transcript) : []),
+    [detail],
+  );
+  const transcriptDuration = useMemo(() => formatDuration(transcriptTurns), [transcriptTurns]);
+  const analysis = detail?.last_analysis ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -274,9 +329,12 @@ function SessionDrawer({
     >
       <div className="drawer-panel" onClick={(e) => e.stopPropagation()}>
         <header>
-          <h3 id="session-drawer-title">
-            {detail ? `${detail.operator.name} - ${detail.customer_label}` : "Sessiya yuklanmoqda"}
-          </h3>
+          <div>
+            <span className="drawer-kicker">Supervisor ko'rigi</span>
+            <h3 id="session-drawer-title">
+              {detail ? `${detail.operator.name} - ${detail.customer_label}` : "Sessiya yuklanmoqda"}
+            </h3>
+          </div>
           <button aria-label="Drawerni yopish" type="button" onClick={onClose}>
             x
           </button>
@@ -288,30 +346,91 @@ function SessionDrawer({
           </div>
         )}
 
-        {detail?.last_analysis && (
-          <section className="drawer-summary">
-            <span className={`risk-badge risk-badge--${detail.risk_level}`}>
-              {detail.priority}
-            </span>
-            <p>{detail.last_analysis.customer_summary}</p>
-            {detail.last_analysis.escalation_packet?.should_escalate && (
-              <div className="escalation-box">
-                <strong>⚠ Eskalatsiya</strong>
-                <p>{detail.last_analysis.escalation_packet.reason}</p>
-              </div>
-            )}
-          </section>
-        )}
-
         {detail && (
           <>
-            <section className="drawer-transcript">
-              {detail.transcript.map((line, i) => (
-                <div key={`${line.speaker}-${i}`} className={`bubble bubble--${line.speaker}`}>
-                  <span>{line.speaker === "customer" ? "Mijoz" : "Operator"}</span>
-                  <p>{line.text}</p>
+            <section className="drawer-metrics" aria-label="Sessiya ko'rsatkichlari">
+              <div>
+                <span>Holat</span>
+                <strong>{detail.status === "escalated" ? "Eskalatsiya" : "Faol"}</strong>
+              </div>
+              <div>
+                <span>Xavf</span>
+                <strong>{riskLabels[detail.risk_level]}</strong>
+              </div>
+              <div>
+                <span>Davomiylik</span>
+                <strong>{transcriptDuration}</strong>
+              </div>
+              <div>
+                <span>AI rejim</span>
+                <strong>{analysis?.analysis_mode === "openai" ? "OpenAI" : "Rules"}</strong>
+              </div>
+            </section>
+
+            {analysis && (
+              <section className="drawer-summary">
+                <div className="drawer-section-head">
+                  <span className={`risk-badge risk-badge--${detail.risk_level}`}>
+                    {detail.priority}
+                  </span>
+                  {typeof analysis.confidence === "number" && (
+                    <span className="confidence-pill">{Math.round(analysis.confidence * 100)}% ishonch</span>
+                  )}
                 </div>
-              ))}
+                <p>{analysis.customer_summary}</p>
+                {analysis.next_best_action && (
+                  <div className="next-action-box">
+                    <span>Keyingi qadam</span>
+                    <strong>{analysis.next_best_action}</strong>
+                  </div>
+                )}
+                {analysis.escalation_packet?.should_escalate && (
+                  <div className="escalation-box">
+                    <strong>Eskalatsiya</strong>
+                    <p>{analysis.escalation_packet.reason}</p>
+                    <small>{analysis.escalation_packet.handoff_note}</small>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {analysis?.suggested_response && (
+              <section className="drawer-section">
+                <div className="drawer-section-title">
+                  <MessageSquareText size={16} />
+                  <h4>Operator uchun javob</h4>
+                </div>
+                <div className="manager-script-card">
+                  <strong>{analysis.suggested_response}</strong>
+                  {analysis.agent_script && analysis.agent_script.length > 0 && (
+                    <ol>
+                      {analysis.agent_script.slice(0, 4).map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              </section>
+            )}
+
+            <section className="drawer-section">
+              <div className="drawer-section-title">
+                <Clock3 size={16} />
+                <h4>Suhbat timeline</h4>
+                <span>{transcriptTurns.length} segment</span>
+              </div>
+              <div className="drawer-transcript">
+                {transcriptTurns.map((turn, i) => (
+                  <div key={`${turn.speaker}-${i}-${turn.start ?? "na"}`} className={`bubble bubble--${turn.speaker}`}>
+                    <span>
+                      {speakerLabel(turn.speaker)}
+                      {turn.start !== undefined && turn.end !== undefined ? ` | ${formatRange(turn.start, turn.end)}` : ""}
+                      {turn.rawSpeaker ? ` | ${turn.rawSpeaker}` : ""}
+                    </span>
+                    <p>{turn.text}</p>
+                  </div>
+                ))}
+              </div>
             </section>
 
             <footer>
@@ -330,4 +449,88 @@ function SessionDrawer({
       </div>
     </aside>
   );
+}
+
+function buildTranscriptTurns(transcript: { speaker: Speaker; text: string }[]): TranscriptTurn[] {
+  return transcript.flatMap((line) => parseTranscriptText(line.text, line.speaker));
+}
+
+function parseTranscriptText(text: string, fallbackSpeaker: Speaker): TranscriptTurn[] {
+  const parsed = safeJsonParse(text.trim());
+  if (!parsed) {
+    return [{ speaker: fallbackSpeaker, text }];
+  }
+
+  const segments = Array.isArray(parsed)
+    ? parsed
+    : typeof parsed === "object" && parsed !== null && "transcript" in parsed && Array.isArray((parsed as { transcript?: unknown }).transcript)
+      ? (parsed as { transcript: unknown[] }).transcript
+      : [parsed];
+
+  const rawSpeakers = Array.from(
+    new Set(
+      segments
+        .map((segment) => (isTranscriptSegment(segment) && typeof segment.speaker === "string" ? segment.speaker : ""))
+        .filter(Boolean),
+    ),
+  );
+  const speakerMap = new Map<string, Speaker>();
+  rawSpeakers.forEach((rawSpeaker, index) => {
+    speakerMap.set(rawSpeaker, rawSpeakers.length === 1 ? fallbackSpeaker : index === 0 ? "customer" : "agent");
+  });
+
+  return segments.flatMap((segment): TranscriptTurn[] => {
+    if (!isTranscriptSegment(segment) || typeof segment.text !== "string") {
+      return [];
+    }
+    const rawSpeaker = typeof segment.speaker === "string" ? segment.speaker : undefined;
+    return [
+      {
+        end: toNumber(segment.end),
+        rawSpeaker,
+        speaker: rawSpeaker ? speakerMap.get(rawSpeaker) ?? fallbackSpeaker : fallbackSpeaker,
+        start: toNumber(segment.start),
+        text: segment.text,
+      },
+    ];
+  });
+}
+
+function safeJsonParse(value: string): unknown | null {
+  if (!value.startsWith("[") && !value.startsWith("{")) {
+    return null;
+  }
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function isTranscriptSegment(value: unknown): value is RawTranscriptSegment {
+  return typeof value === "object" && value !== null && "text" in value;
+}
+
+function toNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function speakerLabel(speaker: Speaker): string {
+  return speaker === "customer" ? "Mijoz" : "Operator";
+}
+
+function formatRange(start: number, end: number): string {
+  return `${formatSeconds(start)}-${formatSeconds(end)}`;
+}
+
+function formatDuration(turns: TranscriptTurn[]): string {
+  const lastEnd = turns.reduce((max, turn) => Math.max(max, turn.end ?? 0), 0);
+  return lastEnd > 0 ? formatSeconds(lastEnd) : `${turns.length} xabar`;
+}
+
+function formatSeconds(value: number): string {
+  const totalSeconds = Math.max(0, Math.round(value));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
