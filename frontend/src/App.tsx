@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   BadgeCheck,
+  Bot,
   ClipboardList,
   Copy,
   Database,
@@ -8,7 +9,9 @@ import {
   FileText,
   Gauge,
   Mic,
+  PhoneCall,
   PlayCircle,
+  Radio,
   Send,
   ShieldCheck,
   UploadCloud,
@@ -30,7 +33,8 @@ import type {
   ProductReference,
   Sentiment,
   SpeakerLine,
-  TtsResponse
+  TtsResponse,
+  OutboundCallResponse
 } from "./types";
 
 const FALLBACK_MESSAGE =
@@ -86,7 +90,9 @@ const temperatureLabels: Record<AnalysisResponse["lead_temperature"], string> = 
 
 const analysisModeLabels: Record<AnalysisResponse["analysis_mode"], string> = {
   rules: "Rules fallback",
-  openai: "OpenAI"
+  openai: "OpenAI",
+  gemini: "Gemini",
+  demo: "Demo"
 };
 
 const complianceStatusLabels: Record<ComplianceStatus, string> = {
@@ -122,6 +128,9 @@ function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [isScenarioLoading, setIsScenarioLoading] = useState(true);
+  const [isCalling, setIsCalling] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("+99890");
+  const [outboundResult, setOutboundResult] = useState<OutboundCallResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<"operator" | "manager">(() =>
     typeof window !== "undefined" && window.location.hash === "#manager" ? "manager" : "operator",
@@ -331,6 +340,28 @@ function App() {
     }
   };
 
+  const startOutboundCall = async () => {
+    if (!phoneNumber.trim()) {
+      setError("Telefon raqamini +998... formatida kiriting.");
+      return;
+    }
+
+    setIsCalling(true);
+    setError("");
+    setOutboundResult(null);
+    try {
+      const result = await apiPost<{ to: string; customerId: string }, OutboundCallResponse>("/api/agent/outbound-call", {
+        to: phoneNumber.trim(),
+        customerId: "cust_001"
+      });
+      setOutboundResult(result);
+    } catch (caught: unknown) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setIsCalling(false);
+    }
+  };
+
   if (mode === "manager") {
     return <ManagerView />;
   }
@@ -339,8 +370,8 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">SQB Bank aloqa markazi</p>
-          <h1>SQB mijoz tahlili</h1>
+          <p className="eyebrow">Bank call-center AI</p>
+          <h1>Operator Copilot + AI Call Agent</h1>
         </div>
         <div className="topbar-actions">
           <button
@@ -354,7 +385,7 @@ function App() {
           </button>
           <div className="status-pill">
             <span className="live-dot" />
-            Jonli tahlil
+            Real-time CRM
           </div>
         </div>
       </header>
@@ -365,6 +396,44 @@ function App() {
           {error}
         </div>
       )}
+
+      <section className="telephony-strip">
+        <div className="mode-card active">
+          <Bot size={20} />
+          <div>
+            <strong>Copilot mode</strong>
+            <span>Operator gaplashadi, AI yon panelda tavsiya, checklist va guardrail beradi.</span>
+          </div>
+        </div>
+        <div className="mode-card">
+          <Radio size={20} />
+          <div>
+            <strong>AI Call Agent mode</strong>
+            <span>Telefon qo'ng'irog'i Twilio orqali backendga keladi, agent CRM toollar bilan ishlaydi.</span>
+          </div>
+        </div>
+        <div className="call-card">
+          <label htmlFor="phone-input">Outbound demo</label>
+          <div className="phone-row">
+            <input
+              id="phone-input"
+              onChange={(event) => setPhoneNumber(event.target.value)}
+              placeholder="+998901112233"
+              value={phoneNumber}
+            />
+            <button className="primary-button" disabled={isCalling} onClick={() => void startOutboundCall()} type="button">
+              <PhoneCall size={17} />
+              {isCalling ? "Qo'ng'iroq..." : "AI qo'ng'iroq"}
+            </button>
+          </div>
+          {outboundResult && (
+            <p className="call-result">
+              {outboundResult.message}
+              {outboundResult.callSid ? ` SID: ${outboundResult.callSid}` : ""}
+            </p>
+          )}
+        </div>
+      </section>
 
       <section className="assist-grid">
         <section className="panel input-panel">

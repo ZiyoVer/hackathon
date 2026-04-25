@@ -60,7 +60,7 @@ export interface EscalationPacket {
 }
 
 export interface AnalysisResponse {
-  analysis_mode: "rules" | "openai";
+  analysis_mode: "rules" | "openai" | "gemini" | "demo";
   matched_signals: string[];
   intent: Intent;
   sentiment: Sentiment;
@@ -114,4 +114,11 @@ export interface TtsResponse {
   provider: string;
   audio_url: string | null;
   message: string;
+}
+
+export interface OutboundCallResponse {
+  mode: "real" | "demo";
+  callSid?: string;
+  message: string;
+  webhookUrl: string;
 }

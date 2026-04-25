@@ -1,83 +1,129 @@
-# SQB Agent Copilot
+# Bank AI Call Center
 
-Bank call-markaz agentlari uchun real-time AI copilot. MVP text/audio simulation rejimida ishlaydi: mijoz intentini, e'tirozini, sentimentini aniqlaydi, agentga javob tavsiya qiladi, compliance checklist yuritadi va CRM uchun post-call summary tayyorlaydi.
+Hackathon MVP: bank call-center uchun ikki rejimli AI platforma.
+
+- **Operator Copilot**: transcript, intent, next-best-offer, KYC/AML checklist, compliance guardrail.
+- **AI Call Agent**: Twilio telefon qo'ng'irog'i orqali mijoz bilan o'zi gaplashadi va CRM status/ticket/lead yaratadi.
+- **CRM layer**: demo in-memory CRM, optional Bitrix24 webhook sync.
 
 ## Stack
 
 - Frontend: React + Vite + TypeScript
-- Backend: FastAPI + Pydantic
-- Audio: Aisha AI STT/TTS adapteri
-- Storage: Wasabi S3-compatible upload adapteri
-- Deploy: Railway, bitta service ichida frontend build + API
+- Backend: Node.js + Express + TypeScript + WebSocket
+- Voice: Gemini Live API + Twilio Media Streams
+- CRM: demo CRM, Bitrix24 webhook adapter
+- Deploy: Railway Dockerfile
 
 ## Local ishga tushirish
 
-Backend:
-
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn backend.main:app --reload
+cp .env.example .env
+npm --prefix backend install
+npm --prefix frontend install
+npm run dev:api
 ```
 
-Frontend:
+Alohida terminal:
 
 ```bash
-cd frontend
-npm install
-npm run dev
+npm run dev:web
 ```
 
 URL:
 
-- Frontend: `http://localhost:5173`
-- API docs: `http://localhost:8000/docs`
+- Web: `http://localhost:5173`
+- API: `http://localhost:8080`
+- Health: `http://localhost:8080/health`
 
-## Deploy
+## Telefon demo
 
-Railway Dockerfile orqali build qiladi:
+Twilio telefon qo'ng'irog'i uchun backend public HTTPS/WSS URLda turishi kerak.
+Localda eng tez yo'l:
 
 ```bash
-docker build -t sqb-agent-copilot .
-docker run -p 8000:8000 --env-file .env sqb-agent-copilot
+ngrok http 8080
 ```
 
-Railway env variables uchun `.env.example`dagi nomlardan foydalaning. Secret keylarni GitHubga commit qilmang.
+`.env`:
 
-## MVP endpointlar
+```env
+PUBLIC_BASE_URL="https://YOUR-NGROK.ngrok-free.app"
+PUBLIC_WS_BASE_URL="wss://YOUR-NGROK.ngrok-free.app"
+GEMINI_API_KEY="..."
+TWILIO_ACCOUNT_SID="..."
+TWILIO_AUTH_TOKEN="..."
+TWILIO_FROM_NUMBER="+1..."
+```
 
-- `GET /health`
+Twilio Console ichida telefon raqamining Voice webhook URLini shunday qo'ying:
+
+```text
+https://YOUR-NGROK.ngrok-free.app/api/voice/twilio?customerId=cust_001
+```
+
+Keyin telefoningizdan Twilio raqamiga qo'ng'iroq qiling. Twilio audio streamni:
+
+```text
+wss://YOUR-NGROK.ngrok-free.app/api/voice/twilio/stream
+```
+
+endpointga yuboradi, backend esa Gemini Live bilan real-time agentni ulaydi.
+
+## Muhim endpointlar
+
 - `GET /api/demo-scenarios`
 - `POST /api/analyze-message`
 - `POST /api/analyze-call`
-- `POST /api/audio/transcribe`
-- `POST /api/audio/synthesize`
+- `POST /api/agent/outbound-call`
+- `POST /api/voice/twilio`
+- `WS /api/voice/twilio/stream`
+- `GET /api/crm/customers`
+- `GET /api/crm/calls`
+- `PATCH /api/crm/calls/:callId/status`
+- `POST /api/crm/calls/:callId/tickets`
+- `POST /api/crm/calls/:callId/summary`
 
-## AI tahlil
+## API keylar qayerdan olinadi
 
-Default holatda tahlil local rules bilan ishlaydi. Real LLM ulash uchun:
+### Gemini
+
+1. `https://aistudio.google.com/app/apikey` ga kiring.
+2. Google Cloud project tanlang yoki yangisini yarating.
+3. API key yarating.
+4. `.env` ichiga `GEMINI_API_KEY` sifatida yozing.
+
+Production/privacy uchun Vertex AI tarafida billing, IAM va data governance bilan ishlatish kerak.
+
+### Twilio
+
+1. `https://console.twilio.com` da account oching.
+2. Voice-capable raqam sotib oling.
+3. Console dashboarddan `Account SID` va `Auth Token` oling.
+4. Raqamni `.env`dagi `TWILIO_FROM_NUMBER`ga yozing.
+5. Inbound webhook URL: `/api/voice/twilio`.
+
+Trial accountda outbound call uchun chaqiriladigan telefon raqami verified bo'lishi mumkin.
+
+### Bitrix24 optional
+
+1. Bitrix24: `Applications -> Developer resources -> Other -> Incoming webhook`.
+2. CRM va Tasks permission bering.
+3. Webhook base URLni `.env`dagi `BITRIX24_WEBHOOK_URL`ga yozing.
+
+Misol:
 
 ```env
-AI_PROVIDER=openai
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
+BITRIX24_WEBHOOK_URL="https://yourcompany.bitrix24.com/rest/1/secret"
 ```
 
-Backend OpenAI Responses API va Structured Outputs JSON schema orqali javob oladi.
-`AI_FALLBACK_TO_RULES=true` bo'lsa OpenAI xatosida demo to'xtab qolmaydi va local rules natija qaytaradi.
+Backend ticket yaratganda `crm.lead.add`, status update bo'lganda `tasks.task.add` chaqiradi.
 
-## Aisha AI integratsiya
+## Demo pitch
 
-Aisha docs bo'yicha:
+Bankka ko'rsatadigan asosiy ssenariy:
 
-- Base URL: `https://back.aisha.group`
-- STT upload: `POST /api/v2/stt/post/`
-- STT result: `GET /api/v2/stt/get/{id}/`
-- TTS: `POST /api/v1/tts/post/`
-- TTS status: `GET /api/v1/tts/status/{id}/`
-- Auth header: `x-api-key`
-- STT form fields: `audio`, `language=uz`, `has_diarization=true`
-- TTS form fields: `transcript`, `language=uz`, `model=gulnoza|jaxongir`
-
-API key lokal `.env` yoki Railway Variables ichida `AISHA_API_KEY` sifatida beriladi.
+1. Mijoz kredit foizi qimmatligini aytadi.
+2. Copilot 2 soniya ichida intent, e'tiroz, next-best-offer chiqaradi.
+3. Operator noto'g'ri va'da bersa compliance guardrail ushlaydi.
+4. KYC savoli qolib ketsa checklist alert beradi.
+5. AI Call Agent telefon orqali shikoyatni qabul qiladi, CRM ticket ochadi va statusni `in_progress` qiladi.
