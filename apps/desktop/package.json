@@ -1,0 +1,13 @@
+{
+  "name": "bank-ai-cluely-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "main": "src/main/main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^33.4.11"
+  }
+}

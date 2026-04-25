@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="uz">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bank AI Overlay</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="overlay-shell" data-mode="copilot">
+      <header class="drag-zone">
+        <div class="identity">
+          <span class="pulse"></span>
+          <span id="modeLabel">Copilot</span>
+        </div>
+        <span id="apiStatus" class="quiet-status">checking</span>
+      </header>
+
+      <section class="whisper">
+        <span id="intentValue" class="context-label">Live assist</span>
+        <strong id="primarySuggestion">Mijoz gapini eshitishga tayyor.</strong>
+        <p id="reasonLine">Cmd/Ctrl + Enter yordam chaqiradi. Cmd/Ctrl + 1/2 rejimni almashtiradi.</p>
+      </section>
+
+      <section class="signal-line">
+        <span id="riskValue">Risk: -</span>
+        <span id="complianceValue">Compliance: -</span>
+      </section>
+
+      <section class="transcript-fade">
+        <label for="liveInput">Transcript</label>
+        <textarea id="liveInput" spellcheck="false">Kartamdan notanish 850 ming so'm yechilibdi, men bu to'lovni qilmaganman.</textarea>
+      </section>
+
+      <section class="quiet-list">
+        <ul id="scriptList">
+          <li>Operatorga qisqa maslahat shu yerda chiqadi.</li>
+        </ul>
+      </section>
+
+      <section class="quiet-warning">
+        <span>Guardrail</span>
+        <ul id="warningList">
+          <li>OTP, PIN, CVV so'ramang.</li>
+        </ul>
+      </section>
+
+      <section class="ambient-actions">
+        <button data-scenario="fraud">fraud</button>
+        <button data-scenario="credit">credit</button>
+        <button data-scenario="complaint">issue</button>
+        <button id="assistBtn">assist</button>
+        <button id="ticketBtn">ticket</button>
+        <button id="summaryBtn">summary</button>
+        <button id="hideBtn">hide</button>
+      </section>
+
+      <footer>
+        <span id="crmLine">CRM: Aziz Karimov, salary segment, karta active.</span>
+      </footer>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

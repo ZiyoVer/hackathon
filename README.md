@@ -16,21 +16,31 @@ Hackathon MVP: bank call-center uchun ikki rejimli AI platforma.
 
 ## Local ishga tushirish
 
+Cluely-style desktop overlay:
+
+```bash
+npm --prefix apps/desktop install
+npm run dev:desktop
+```
+
+Overlay backenddan real tahlil olishi uchun alohida terminalda API ham ishlasin:
+
 ```bash
 cp .env.example .env
 npm --prefix backend install
-npm --prefix frontend install
 npm run dev:api
 ```
 
-Alohida terminal:
+Eski web CRM/demo sahifasi alohida:
 
 ```bash
+npm --prefix frontend install
 npm run dev:web
 ```
 
 URL:
 
+- Desktop overlay: `npm run dev:desktop`
 - Web: `http://localhost:5173`
 - API: `http://localhost:8080`
 - Health: `http://localhost:8080/health`

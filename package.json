@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev:api": "npm --prefix backend run dev",
+    "dev:desktop": "npm --prefix apps/desktop run dev",
     "dev:web": "npm --prefix frontend run dev",
     "build": "npm --prefix backend run build && npm --prefix frontend run build",
     "start": "npm --prefix backend run start"
