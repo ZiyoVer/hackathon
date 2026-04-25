@@ -36,6 +36,8 @@ let mode = "copilot";
 let recognition = null;
 let isListening = false;
 let backendAutoStarted = false;
+let analysisTimer = null;
+let analysisRequestId = 0;
 
 window.bankOverlay.getConfig().then((config) => {
   apiBaseUrl = config.apiBaseUrl || apiBaseUrl;
@@ -64,12 +66,13 @@ $("assistBtn").addEventListener("click", () => void runAssist());
 $("listenBtn").addEventListener("click", () => toggleListening());
 $("copilotModeBtn").addEventListener("click", () => setMode("copilot"));
 $("agentModeBtn").addEventListener("click", () => setMode("agent"));
+$("liveInput").addEventListener("input", () => queueRealtimeAssist());
 
 document.querySelectorAll("[data-scenario]").forEach((button) => {
   button.addEventListener("click", () => {
     const key = button.getAttribute("data-scenario");
     $("liveInput").value = scenarios[key] || scenarios.fraud;
-    void runAssist();
+    queueRealtimeAssist(80);
   });
 });
 
@@ -82,12 +85,25 @@ async function checkApi() {
   }
 }
 
-async function runAssist() {
+function queueRealtimeAssist(delay = 650) {
+  window.clearTimeout(analysisTimer);
+  analysisTimer = window.setTimeout(() => {
+    void runAssist({ realtime: true });
+  }, delay);
+}
+
+async function runAssist(options = {}) {
   const message = $("liveInput").value.trim();
   if (!message) return;
+  const requestId = ++analysisRequestId;
 
-  $("primarySuggestion").textContent = "Tahlil qilinyapti...";
-  $("reasonLine").textContent = "Transcript + CRM kontekst parallel tekshirilmoqda.";
+  if (!options.realtime) {
+    $("primarySuggestion").textContent = "Tahlil qilinyapti...";
+  }
+  $("reasonLine").textContent =
+    mode === "copilot"
+      ? "Fon jarayonlari: transcript, CRM va knowledge base tekshirilmoqda."
+      : "Transcript + CRM kontekst parallel tekshirilmoqda.";
 
   try {
     const response = await fetch(`${apiBaseUrl}/api/analyze-message`, {
@@ -97,8 +113,10 @@ async function runAssist() {
     });
     if (!response.ok) throw new Error("API error");
     const analysis = await response.json();
+    if (requestId !== analysisRequestId) return;
     renderAnalysis(analysis);
   } catch {
+    if (requestId !== analysisRequestId) return;
     renderFallback(message);
   }
 }
@@ -110,11 +128,11 @@ function renderAnalysis(analysis) {
   $("primarySuggestion").textContent =
     mode === "agent"
       ? buildAgentLine(analysis)
-      : analysis.suggested_response || analysis.next_best_action;
+      : buildCopilotAnswer(analysis);
   $("reasonLine").textContent =
     mode === "agent"
       ? "AI Call Agent mijoz bilan o'zi gaplashadi va CRM actionlarni orqa fonda bajaradi."
-      : analysis.next_best_action || "CRM kontekstga qarab javob berish kerak.";
+      : "CRM, compliance va knowledge base fon rejimida tekshirildi.";
   renderList("scriptList", analysis.agent_script || [analysis.suggested_response]);
   renderList("warningList", analysis.do_not_say || ["OTP, PIN, CVV so'ramang."]);
   renderKnowledge(analysis);
@@ -135,7 +153,7 @@ function renderFallback(message) {
   $("reasonLine").textContent =
     mode === "agent"
       ? "AI Call Agent rejimi: javob ovoz orqali beriladi, ticket/summary orqa fonda."
-      : "API offline bo'lgani uchun local fallback ishladi.";
+      : "Local fallback ishladi; operatorga faqat javob ko'rsatildi.";
   renderList("scriptList", data.script);
   renderList("warningList", data.warnings);
   renderList("knowledgeList", [
@@ -153,7 +171,8 @@ function setMode(nextMode) {
   $("reasonLine").textContent =
     mode === "agent"
       ? "Agent mijoz bilan gaplashadi; overlay faqat holat va riskni ko'rsatadi."
-      : "Operator gaplashadi; overlay shivir sifatida keyingi gapni beradi.";
+      : "Operator gaplashadi; overlay faqat aytiladigan javobni beradi.";
+  queueRealtimeAssist(80);
 }
 
 function toggleListening() {
@@ -197,7 +216,7 @@ function toggleListening() {
     const value = `${$("liveInput").value}\n${finalText || interimText}`.trim();
     $("liveInput").value = value;
     if (finalText.trim()) {
-      void runAssist();
+      queueRealtimeAssist(80);
     }
   };
   recognition.start();
@@ -221,6 +240,13 @@ function buildAgentLine(analysis) {
     return "Kredit bo'yicha shartlarni skoringdan keyin aniq aytaman, hozir ma'lumotlarni tekshiraman.";
   }
   return analysis.suggested_response || "Sizga yordam berish uchun ma'lumotlarni tekshiryapman.";
+}
+
+function buildCopilotAnswer(analysis) {
+  if (Array.isArray(analysis.agent_script) && analysis.agent_script.length > 0) {
+    return analysis.agent_script[0];
+  }
+  return analysis.suggested_response || analysis.next_best_action || "Mijozga aniqlashtiruvchi savol bering.";
 }
 
 function renderList(id, items) {
