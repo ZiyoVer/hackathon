@@ -122,3 +122,66 @@ export interface OutboundCallResponse {
   message: string;
   webhookUrl: string;
 }
+
+export type CaseStatus = "new" | "in_progress" | "pending_customer" | "resolved" | "not_bank_issue" | "escalated";
+export type CrmSpeaker = "customer" | "agent" | "system";
+
+export interface CustomerProduct {
+  id: string;
+  type: "credit" | "card" | "deposit" | "insurance" | "overdraft";
+  title: string;
+  status: "active" | "closed" | "eligible";
+  balance_range: string;
+}
+
+export interface CustomerProfile {
+  id: string;
+  full_name: string;
+  phone_masked: string;
+  age: number;
+  income_range: string;
+  segment: "mass" | "salary" | "premium" | "sme";
+  risk_level: "low" | "medium" | "high";
+  is_pep: boolean;
+  kyc_status: "complete" | "needs_update" | "missing";
+  products: CustomerProduct[];
+  last_interaction: string;
+  next_best_products: string[];
+}
+
+export interface Ticket {
+  id: string;
+  type: "complaint" | "service_request" | "fraud_alert" | "technical_issue";
+  department: "cards" | "credit" | "digital" | "compliance" | "branch" | "support";
+  priority: "low" | "medium" | "high";
+  status: CaseStatus;
+  summary: string;
+  sla_due_at: string;
+}
+
+export interface Lead {
+  id: string;
+  product_type: "credit_card" | "insurance" | "deposit" | "loan_refinance" | "overdraft";
+  score: number;
+  next_action: string;
+  status: "new" | "offered" | "accepted" | "rejected" | "follow_up";
+}
+
+export interface CallSession {
+  id: string;
+  provider_call_sid?: string;
+  customer_id: string;
+  mode: "copilot" | "ai_call_agent";
+  channel: "web_demo" | "twilio" | "pbx";
+  started_at: string;
+  ended_at?: string;
+  status: CaseStatus;
+  intent: Intent;
+  sentiment: Sentiment;
+  outcome: string;
+  quality_score: number;
+  transcript: Array<{ speaker: CrmSpeaker; text: string; at: string; confidence?: number }>;
+  tickets: Ticket[];
+  leads: Lead[];
+  notes: string[];
+}

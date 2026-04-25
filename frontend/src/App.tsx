@@ -1,968 +1,486 @@
 import {
-  AlertTriangle,
-  BadgeCheck,
-  Bot,
-  ClipboardList,
-  Copy,
-  Database,
-  FileAudio,
-  FileText,
-  Gauge,
-  Mic,
+  AlertCircle,
+  CheckCircle2,
+  Clock3,
+  FilePlus2,
+  MessageSquareText,
   PhoneCall,
-  PlayCircle,
-  Radio,
+  RefreshCw,
   Send,
-  ShieldCheck,
-  UploadCloud,
+  UserRound,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { apiGet, apiPost, apiUpload } from "./lib/api";
-import { ManagerView } from "./ManagerView";
-import type {
-  AnalysisResponse,
-  AudioTranscriptionResponse,
-  CallSummaryResponse,
-  ComplianceEvidence,
-  ComplianceResult,
-  ComplianceStatus,
-  DemoScenario,
-  Intent,
-  Objection,
-  ProductReference,
-  Sentiment,
-  SpeakerLine,
-  TtsResponse,
-  OutboundCallResponse
-} from "./types";
+import { useEffect, useMemo, useState } from "react";
+import { apiGet, apiPatch, apiPost } from "./lib/api";
+import type { CallSession, CaseStatus, CrmSpeaker, CustomerProfile, Lead, Ticket } from "./types";
 
-const FALLBACK_MESSAGE =
-  "Assalomu alaykum, menga 50 million so'm kredit kerak edi. 24 oyga olmoqchiman, lekin foizi qimmat bo'lsa kerak.";
+const statusLabels: Record<CaseStatus, string> = {
+  new: "Yangi",
+  in_progress: "Jarayonda",
+  pending_customer: "Mijoz javobi kutilmoqda",
+  resolved: "Hal qilindi",
+  not_bank_issue: "Bank muammosi emas",
+  escalated: "Eskalatsiya",
+};
 
-const DEFAULT_TRANSCRIPT: SpeakerLine[] = [
-  { speaker: "customer", text: "Assalomu alaykum, menga 50 million so'm kredit kerak edi." },
-  { speaker: "agent", text: "Qanday muddatga olmoqchisiz?" },
-  { speaker: "customer", text: "24 oyga. Lekin foizi qimmat bo'lsa kerak." }
+const statusOptions: CaseStatus[] = [
+  "new",
+  "in_progress",
+  "pending_customer",
+  "resolved",
+  "not_bank_issue",
+  "escalated",
 ];
 
-const intentLabels: Record<Intent, string> = {
-  credit_request: "Kredit",
-  card_opening: "Karta",
-  deposit: "Omonat",
-  leasing: "Lizing",
-  complaint: "Shikoyat",
-  general_question: "Umumiy"
+const speakerLabels: Record<CrmSpeaker, string> = {
+  customer: "Mijoz",
+  agent: "Agent",
+  system: "Tizim",
 };
 
-const sentimentLabels: Record<Sentiment, string> = {
-  positive: "Ijobiy",
-  neutral: "Neytral",
-  negative: "Salbiy"
-};
-
-const objectionLabels: Record<Objection, string> = {
-  interest_rate_expensive: "Foiz qimmat",
-  need_to_think: "O'ylab ko'radi",
-  competitor_better: "Raqobatchi yaxshi",
-  not_trust: "Ishonchsizlik",
-  call_later: "Keyinroq",
-  none: "Yo'q"
-};
-
-const riskLabels: Record<AnalysisResponse["risk_level"], string> = {
-  low: "Past",
-  medium: "O'rta",
-  high: "Yuqori"
-};
-
-const priorityLabels: Record<AnalysisResponse["priority"], string> = {
-  normal: "Normal",
-  attention: "E'tibor",
-  urgent: "Shoshilinch"
-};
-
-const temperatureLabels: Record<AnalysisResponse["lead_temperature"], string> = {
-  cold: "Sovuq",
-  warm: "Iliq",
-  hot: "Issiq"
-};
-
-const analysisModeLabels: Record<AnalysisResponse["analysis_mode"], string> = {
-  rules: "Rules fallback",
-  openai: "OpenAI",
-  gemini: "Gemini",
-  demo: "Demo"
-};
-
-const complianceStatusLabels: Record<ComplianceStatus, string> = {
-  green: "Yashil",
-  yellow: "Sariq",
-  red: "Qizil"
-};
-
-const sqbFocusByIntent: Record<Intent, string[]> = {
-  credit_request: ["Kredit", "Kredit karta", "SQB Mobile"],
-  card_opening: ["Bank kartalari", "Kredit karta", "SQB Mobile"],
-  deposit: ["Omonatlar", "SQB Mobile", "Bank ofisi"],
-  leasing: ["Biznes xizmatlari", "Kredit", "Filial maslahati"],
-  complaint: ["Mijoz murojaati", "Xavfsizlik", "Aloqa markazi"],
-  general_question: ["SQB Mobile", "Kartalar", "To'lovlar"]
-};
-
-type SupportTab = "script" | "compliance" | "crm" | "transcript";
+interface SummaryResult {
+  session: CallSession;
+  summary: string;
+  crm_note: string;
+}
 
 function App() {
-  const [message, setMessage] = useState(FALLBACK_MESSAGE);
-  const [transcript, setTranscript] = useState<SpeakerLine[]>(DEFAULT_TRANSCRIPT);
-  const [scenarios, setScenarios] = useState<DemoScenario[]>([]);
-  const [activeScenarioId, setActiveScenarioId] = useState<string>("");
-  const [activeSupportTab, setActiveSupportTab] = useState<SupportTab>("script");
-  const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
-  const [summary, setSummary] = useState<CallSummaryResponse | null>(null);
-  const [audioResult, setAudioResult] = useState<AudioTranscriptionResponse | null>(null);
-  const [ttsResult, setTtsResult] = useState<TtsResponse | null>(null);
+  const [customers, setCustomers] = useState<CustomerProfile[]>([]);
+  const [calls, setCalls] = useState<CallSession[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [activeCallId, setActiveCallId] = useState("");
+  const [message, setMessage] = useState("Mijoz kartadan notanish yechim bo'lganini aytdi.");
+  const [speaker, setSpeaker] = useState<CrmSpeaker>("customer");
+  const [statusNote, setStatusNote] = useState("");
+  const [summary, setSummary] = useState<SummaryResult | null>(null);
   const [error, setError] = useState("");
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isSynthesizing, setIsSynthesizing] = useState(false);
-  const [isScenarioLoading, setIsScenarioLoading] = useState(true);
-  const [isCalling, setIsCalling] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState("+99890");
-  const [outboundResult, setOutboundResult] = useState<OutboundCallResponse | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [mode, setMode] = useState<"operator" | "manager">(() =>
-    typeof window !== "undefined" && window.location.hash === "#manager" ? "manager" : "operator",
+  const [isLoading, setIsLoading] = useState(true);
+  const [isWorking, setIsWorking] = useState(false);
+
+  const selectedCustomer = useMemo(
+    () => customers.find((customer) => customer.id === selectedCustomerId) ?? customers[0],
+    [customers, selectedCustomerId],
   );
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [activeOperator] = useState("op1");
+
+  const activeCall = useMemo(
+    () => calls.find((call) => call.id === activeCallId) ?? calls.find((call) => call.customer_id === selectedCustomer?.id) ?? calls[0],
+    [activeCallId, calls, selectedCustomer?.id],
+  );
+
+  const customerCalls = useMemo(
+    () => calls.filter((call) => call.customer_id === selectedCustomer?.id),
+    [calls, selectedCustomer?.id],
+  );
+
+  const metrics = useMemo(() => {
+    const openCases = calls.filter((call) => !["resolved", "not_bank_issue"].includes(call.status)).length;
+    const tickets = calls.reduce((total, call) => total + call.tickets.length, 0);
+    const leads = calls.reduce((total, call) => total + call.leads.length, 0);
+    const avgQuality = calls.length
+      ? Math.round(calls.reduce((total, call) => total + call.quality_score, 0) / calls.length)
+      : 0;
+    return { openCases, tickets, leads, avgQuality };
+  }, [calls]);
 
   useEffect(() => {
-    const onHash = () => {
-      setMode(window.location.hash === "#manager" ? "manager" : "operator");
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    void loadCrm();
   }, []);
-
-  const ensureSession = async (): Promise<string | null> => {
-    if (sessionId) return sessionId;
-    try {
-      const created = await apiPost<
-        { operator_id: string; customer_label: string },
-        { id: string }
-      >("/api/sessions", {
-        operator_id: activeOperator,
-        customer_label: "Mijoz #" + Math.floor(Math.random() * 1000),
-      });
-      setSessionId(created.id);
-      return created.id;
-    } catch {
-      return null;
-    }
-  };
-
-  const pushToSession = async (text: string, speaker: "customer" | "agent" = "customer") => {
-    const sid = await ensureSession();
-    if (!sid) return;
-    try {
-      await apiPost(`/api/sessions/${sid}/messages`, { speaker, text });
-    } catch {
-      /* ignore */
-    }
-  };
 
   useEffect(() => {
-    apiGet<DemoScenario[]>("/api/demo-scenarios")
-      .then((data) => {
-        setScenarios(data);
-        if (data.length > 0) {
-          setActiveScenarioId(data[0].id);
-        }
-      })
-      .catch((caught: unknown) => setError(getErrorMessage(caught)))
-      .finally(() => setIsScenarioLoading(false));
-  }, []);
-
-  const signalItems = useMemo(() => {
-    const complianceScore = summary?.compliance.score ?? analysis?.compliance.score ?? 0;
-    return [
-      { label: "Mavzu", value: analysis ? intentLabels[analysis.intent] : "Aniqlanmagan" },
-      { label: "Ustuvorlik", value: analysis ? priorityLabels[analysis.priority] : "Aniqlanmagan" },
-      { label: "Qiziqish", value: analysis ? temperatureLabels[analysis.lead_temperature] : "Aniqlanmagan" },
-      { label: "Nazorat", value: complianceScore ? `${complianceScore}%` : "0%" }
-    ];
-  }, [analysis, summary]);
-
-  const scriptLines = analysis?.agent_script?.length ? analysis.agent_script : analysis ? [analysis.suggested_response] : [];
-  const compliance = summary?.compliance ?? analysis?.compliance ?? null;
-  const complianceEvidence = summary?.compliance_evidence?.length
-    ? summary.compliance_evidence
-    : analysis?.compliance_evidence ?? [];
-  const primaryScriptLine = scriptLines[0] ?? "";
-
-  const copyBrief = async () => {
-    if (!analysis) {
-      return;
+    if (!selectedCustomerId && customers.length > 0) {
+      setSelectedCustomerId(customers[0].id);
     }
+  }, [customers, selectedCustomerId]);
 
-    const brief = [
-      `Mijoz: ${analysis.customer_summary}`,
-      `Mavzu: ${intentLabels[analysis.intent]}`,
-      `Xavf: ${riskLabels[analysis.risk_level]}`,
-      `Ustuvorlik: ${priorityLabels[analysis.priority]}`,
-      `Keyingi qadam: ${analysis.next_best_action}`,
-      `Yakuniy gap: ${analysis.closing_line}`,
-      `Teglar: ${analysis.crm_tags.join(", ")}`,
-      analysis.escalation_packet?.should_escalate ? `Supervisorga: ${analysis.escalation_packet.handoff_note}` : ""
-    ].join("\n");
-
-    try {
-      await navigator.clipboard.writeText(brief);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
-    } catch (caught: unknown) {
-      setError(getErrorMessage(caught));
-    }
-  };
-
-  const analyzeText = async (
-    value = message,
-    options: { appendToTranscript?: boolean; pushSession?: boolean } = {},
-  ) => {
-    if (!value.trim()) {
-      setError("Tahlil qilish uchun mijoz matnini kiriting.");
-      return;
-    }
-
-    const appendToTranscript = options.appendToTranscript ?? true;
-    const pushSession = options.pushSession ?? true;
-    setIsAnalyzing(true);
+  async function loadCrm() {
     setError("");
-    setTtsResult(null);
+    setIsLoading(true);
     try {
-      const result = await apiPost<{ message: string }, AnalysisResponse>("/api/analyze-message", {
-        message: value
-      });
-      setAnalysis(result);
-      if (appendToTranscript) {
-        setTranscript((previous) => {
-          const last = previous[previous.length - 1];
-          if (last?.speaker === "customer" && last.text === value) {
-            return previous;
-          }
-          return [...previous, { speaker: "customer", text: value }];
-        });
+      const [customerData, callData] = await Promise.all([
+        apiGet<CustomerProfile[]>("/api/crm/customers"),
+        apiGet<CallSession[]>("/api/crm/calls"),
+      ]);
+      setCustomers(customerData);
+      setCalls(callData);
+      if (!selectedCustomerId && customerData.length > 0) {
+        setSelectedCustomerId(customerData[0].id);
       }
-      if (pushSession) {
-        void pushToSession(value, "customer");
+      if (!activeCallId && callData.length > 0) {
+        setActiveCallId(callData[0].id);
       }
-    } catch (caught: unknown) {
+    } catch (caught) {
       setError(getErrorMessage(caught));
     } finally {
-      setIsAnalyzing(false);
+      setIsLoading(false);
     }
-  };
+  }
 
-  const analyzeTranscript = async () => {
-    setIsSummarizing(true);
+  async function createCall() {
+    if (!selectedCustomer) return;
     setError("");
+    setIsWorking(true);
     try {
-      const result = await apiPost<{ transcript: SpeakerLine[] }, CallSummaryResponse>("/api/analyze-call", {
-        transcript
+      const call = await apiPost<{ customerId: string; mode: "copilot" }, CallSession>("/api/crm/calls", {
+        customerId: selectedCustomer.id,
+        mode: "copilot",
       });
+      setCalls((current) => [call, ...current.filter((item) => item.id !== call.id)]);
+      setActiveCallId(call.id);
+      setSummary(null);
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  async function appendTranscript() {
+    if (!activeCall || !message.trim()) return;
+    setError("");
+    setIsWorking(true);
+    try {
+      const updated = await apiPost<{ speaker: CrmSpeaker; text: string }, CallSession>(
+        `/api/crm/calls/${activeCall.id}/transcript`,
+        { speaker, text: message },
+      );
+      replaceCall(updated);
+      setMessage("");
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  async function updateStatus(status: CaseStatus) {
+    if (!activeCall) return;
+    setError("");
+    setIsWorking(true);
+    try {
+      const updated = await apiPatch<{ status: CaseStatus; note?: string }, CallSession>(
+        `/api/crm/calls/${activeCall.id}/status`,
+        { status, note: statusNote || undefined },
+      );
+      replaceCall(updated);
+      setStatusNote("");
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  async function createTicket() {
+    if (!activeCall) return;
+    setError("");
+    setIsWorking(true);
+    try {
+      await apiPost<
+        { type: Ticket["type"]; department: Ticket["department"]; priority: Ticket["priority"]; summary: string },
+        Ticket
+      >(`/api/crm/calls/${activeCall.id}/tickets`, {
+        type: activeCall.intent === "complaint" ? "complaint" : "service_request",
+        department: activeCall.intent === "credit_request" ? "credit" : "support",
+        priority: activeCall.quality_score < 75 ? "high" : "medium",
+        summary: activeCall.outcome || "Mijoz murojaati",
+      });
+      await refreshActiveCall(activeCall.id);
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  async function createLead() {
+    if (!activeCall) return;
+    setError("");
+    setIsWorking(true);
+    try {
+      await apiPost<{ productType: Lead["product_type"]; score: number; nextAction: string }, Lead>(
+        `/api/crm/calls/${activeCall.id}/leads`,
+        {
+          productType: "credit_card",
+          score: Math.max(60, activeCall.quality_score),
+          nextAction: "Operator follow-up qilib, taklifni yopadi",
+        },
+      );
+      await refreshActiveCall(activeCall.id);
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  async function saveSummary() {
+    if (!activeCall) return;
+    setError("");
+    setIsWorking(true);
+    try {
+      const result = await apiPost<Record<string, never>, SummaryResult>(`/api/crm/calls/${activeCall.id}/summary`, {});
+      replaceCall(result.session);
       setSummary(result);
-    } catch (caught: unknown) {
+    } catch (caught) {
       setError(getErrorMessage(caught));
     } finally {
-      setIsSummarizing(false);
+      setIsWorking(false);
     }
-  };
+  }
 
-  const synthesizeSuggestion = async () => {
-    if (!analysis?.suggested_response) {
-      return;
-    }
+  async function refreshActiveCall(callId: string) {
+    const updated = await apiGet<CallSession>(`/api/crm/calls/${callId}`);
+    replaceCall(updated);
+  }
 
-    setIsSynthesizing(true);
-    setError("");
-    try {
-      const result = await apiPost<{ text: string; voice: string }, TtsResponse>("/api/audio/synthesize", {
-        text: analysis.suggested_response,
-        voice: "gulnoza"
-      });
-      setTtsResult(result);
-    } catch (caught: unknown) {
-      setError(getErrorMessage(caught));
-    } finally {
-      setIsSynthesizing(false);
-    }
-  };
-
-  const selectScenario = (scenario: DemoScenario) => {
-    setActiveScenarioId(scenario.id);
-    setMessage(scenario.customer_message);
-    setTranscript(scenario.transcript);
-    setSummary(null);
-    setAudioResult(null);
-    setTtsResult(null);
-    void analyzeText(scenario.customer_message, { appendToTranscript: false });
-  };
-
-  const handleScenarioChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const scenario = scenarios.find((item) => item.id === event.target.value);
-    if (scenario) {
-      selectScenario(scenario);
-    }
-  };
-
-  const uploadAudio = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    setIsUploading(true);
-    setError("");
-    setAudioResult(null);
-    try {
-      const result = await apiUpload<AudioTranscriptionResponse>("/api/audio/transcribe", file);
-      setAudioResult(result);
-      setMessage(result.transcript);
-      setTranscript((previous) => [...previous, { speaker: "customer", text: result.transcript }]);
-      void analyzeText(result.transcript, { appendToTranscript: false });
-    } catch (caught: unknown) {
-      setError(getErrorMessage(caught));
-    } finally {
-      setIsUploading(false);
-      event.target.value = "";
-    }
-  };
-
-  const startOutboundCall = async () => {
-    if (!phoneNumber.trim()) {
-      setError("Telefon raqamini +998... formatida kiriting.");
-      return;
-    }
-
-    setIsCalling(true);
-    setError("");
-    setOutboundResult(null);
-    try {
-      const result = await apiPost<{ to: string; customerId: string }, OutboundCallResponse>("/api/agent/outbound-call", {
-        to: phoneNumber.trim(),
-        customerId: "cust_001"
-      });
-      setOutboundResult(result);
-    } catch (caught: unknown) {
-      setError(getErrorMessage(caught));
-    } finally {
-      setIsCalling(false);
-    }
-  };
-
-  if (mode === "manager") {
-    return <ManagerView />;
+  function replaceCall(call: CallSession) {
+    setCalls((current) => [call, ...current.filter((item) => item.id !== call.id)]);
+    setActiveCallId(call.id);
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
+    <main className="crm-shell">
+      <header className="crm-header">
         <div>
-          <p className="eyebrow">Bank call-center AI</p>
-          <h1>Operator Copilot + AI Call Agent</h1>
+          <span className="eyebrow">Bank CRM</span>
+          <h1>Mijoz murojaatlari</h1>
         </div>
-        <div className="topbar-actions">
-          <button
-            className="mode-toggle"
-            type="button"
-            onClick={() => {
-              window.location.hash = "manager";
-            }}
-          >
-            Manager rejimi
+        <div className="header-actions">
+          <button disabled={isLoading} onClick={() => void loadCrm()} type="button">
+            <RefreshCw size={16} />
+            Yangilash
           </button>
-          <div className="status-pill">
-            <span className="live-dot" />
-            Real-time CRM
-          </div>
+          <button disabled={!selectedCustomer || isWorking} onClick={() => void createCall()} type="button">
+            <PhoneCall size={16} />
+            Yangi call
+          </button>
         </div>
       </header>
 
-      {error && (
-        <div className="error-banner" role="alert">
-          <AlertTriangle size={18} />
+      {error ? (
+        <div className="error-line">
+          <AlertCircle size={16} />
           {error}
         </div>
-      )}
+      ) : null}
 
-      <section className="telephony-strip">
-        <div className="mode-card active">
-          <Bot size={20} />
-          <div>
-            <strong>Copilot mode</strong>
-            <span>Operator gaplashadi, AI yon panelda tavsiya, checklist va guardrail beradi.</span>
-          </div>
-        </div>
-        <div className="mode-card">
-          <Radio size={20} />
-          <div>
-            <strong>AI Call Agent mode</strong>
-            <span>Telefon qo'ng'irog'i Twilio orqali backendga keladi, agent CRM toollar bilan ishlaydi.</span>
-          </div>
-        </div>
-        <div className="call-card">
-          <label htmlFor="phone-input">Outbound demo</label>
-          <div className="phone-row">
-            <input
-              id="phone-input"
-              onChange={(event) => setPhoneNumber(event.target.value)}
-              placeholder="+998901112233"
-              value={phoneNumber}
-            />
-            <button className="primary-button" disabled={isCalling} onClick={() => void startOutboundCall()} type="button">
-              <PhoneCall size={17} />
-              {isCalling ? "Qo'ng'iroq..." : "AI qo'ng'iroq"}
-            </button>
-          </div>
-          {outboundResult && (
-            <p className="call-result">
-              {outboundResult.message}
-              {outboundResult.callSid ? ` SID: ${outboundResult.callSid}` : ""}
-            </p>
-          )}
-        </div>
+      <section className="metric-row">
+        <Metric icon={Clock3} label="Ochiq case" value={metrics.openCases.toString()} />
+        <Metric icon={FilePlus2} label="Ticketlar" value={metrics.tickets.toString()} />
+        <Metric icon={MessageSquareText} label="Leadlar" value={metrics.leads.toString()} />
+        <Metric icon={CheckCircle2} label="Sifat score" value={`${metrics.avgQuality}%`} />
       </section>
 
-      <section className="assist-grid">
-        <section className="panel input-panel">
-          <div className="panel-heading">
-            <Mic size={20} />
-            <h2>Mijoz gapi</h2>
+      <section className="crm-grid">
+        <aside className="panel customer-panel">
+          <PanelTitle title="Mijozlar" subtitle={`${customers.length} profil`} />
+          <div className="customer-list">
+            {customers.map((customer) => (
+              <button
+                className={customer.id === selectedCustomer?.id ? "customer-row active" : "customer-row"}
+                key={customer.id}
+                onClick={() => {
+                  setSelectedCustomerId(customer.id);
+                  setActiveCallId(calls.find((call) => call.customer_id === customer.id)?.id ?? "");
+                }}
+                type="button"
+              >
+                <UserRound size={17} />
+                <span>
+                  <strong>{customer.full_name}</strong>
+                  <small>{customer.phone_masked} · {customer.segment}</small>
+                </span>
+              </button>
+            ))}
           </div>
+        </aside>
 
-          <div className="input-toolbar">
-            <label htmlFor="scenario-select">Demo holat</label>
-            <select disabled={isScenarioLoading} id="scenario-select" onChange={handleScenarioChange} value={activeScenarioId}>
-              {isScenarioLoading && <option>Demo holatlar yuklanmoqda</option>}
-              {scenarios.map((scenario) => (
-                <option key={scenario.id} value={scenario.id}>
-                  {scenario.title}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <textarea
-            aria-label="Mijoz gaplari"
-            className="signal-input"
-            onChange={(event) => setMessage(event.target.value)}
-            placeholder="Mijoz gapini yoki transcriptdan asosiy qismini kiriting..."
-            value={message}
-          />
-
-          <label className="voice-upload-card">
-            <UploadCloud size={24} />
-            <div>
-              <strong>{isUploading ? "Ovoz yuklanmoqda..." : "Ovoz fayl yuklash"}</strong>
-              <span>MP3, WAV, M4A yoki WEBM faylni matnga aylantirish</span>
-            </div>
-            <input accept="audio/*" disabled={isUploading} onChange={uploadAudio} type="file" />
-          </label>
-
-          <div className="action-row">
-            <button className="secondary-button" disabled={isSummarizing} onClick={analyzeTranscript} type="button">
-              <FileText size={17} />
-              {isSummarizing ? "CRM..." : "CRM xulosa"}
-            </button>
-            <button className="primary-button" disabled={isAnalyzing} onClick={() => void analyzeText()} type="button">
-              <Send size={17} />
-              {isAnalyzing ? "Tahlil..." : "Mijozni tahlil qilish"}
-            </button>
-          </div>
-
-          {audioResult && (
-            <div className="audio-result">
-              <FileAudio size={18} />
-              <div>
-                <strong>Ovozdan matn olindi</strong>
-                <span>{Math.round(audioResult.confidence * 100)}% ishonch</span>
+        <section className="panel profile-panel">
+          {selectedCustomer ? (
+            <>
+              <PanelTitle title={selectedCustomer.full_name} subtitle={selectedCustomer.phone_masked} />
+              <div className="profile-strip">
+                <Chip label="Segment" value={selectedCustomer.segment} />
+                <Chip label="KYC" value={selectedCustomer.kyc_status} tone={selectedCustomer.kyc_status === "complete" ? "good" : "warn"} />
+                <Chip label="Risk" value={selectedCustomer.risk_level} tone={selectedCustomer.risk_level === "high" ? "danger" : "neutral"} />
+                <Chip label="PEP" value={selectedCustomer.is_pep ? "ha" : "yo'q"} tone={selectedCustomer.is_pep ? "danger" : "good"} />
               </div>
-            </div>
+              <div className="section-block">
+                <h2>Mahsulotlar</h2>
+                <div className="product-list">
+                  {selectedCustomer.products.map((product) => (
+                    <div className="product-row" key={product.id}>
+                      <span>
+                        <strong>{product.title}</strong>
+                        <small>{product.type} · {product.status}</small>
+                      </span>
+                      <b>{product.balance_range}</b>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="section-block">
+                <h2>Next best products</h2>
+                <div className="tag-row">
+                  {selectedCustomer.next_best_products.map((product) => (
+                    <span key={product}>{product}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="section-block">
+                <h2>Call sessiyalar</h2>
+                <div className="case-list">
+                  {customerCalls.length ? customerCalls.map((call) => (
+                    <button
+                      className={call.id === activeCall?.id ? "case-row active" : "case-row"}
+                      key={call.id}
+                      onClick={() => setActiveCallId(call.id)}
+                      type="button"
+                    >
+                      <span>
+                        <strong>{statusLabels[call.status]}</strong>
+                        <small>{call.intent} · {new Date(call.started_at).toLocaleString()}</small>
+                      </span>
+                      <b>{call.quality_score}%</b>
+                    </button>
+                  )) : <p className="empty-text">Bu mijoz uchun call yo'q. Yangi call yarating.</p>}
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="empty-text">CRM mijozlari yuklanmoqda.</p>
           )}
         </section>
 
-        <section className="panel analysis-panel">
-          {analysis ? (
+        <section className="panel case-panel">
+          {activeCall ? (
             <>
-              <div className="decision-hero">
-                <span>Keyingi javob</span>
-                <strong>{primaryScriptLine || analysis.suggested_response}</strong>
-                <p>{analysis.next_best_action}</p>
+              <PanelTitle title={`Case ${activeCall.id}`} subtitle={`${activeCall.channel} · ${activeCall.mode}`} />
+              <div className="profile-strip">
+                <Chip label="Status" value={statusLabels[activeCall.status]} tone={activeCall.status === "resolved" ? "good" : "neutral"} />
+                <Chip label="Intent" value={activeCall.intent} />
+                <Chip label="Sentiment" value={activeCall.sentiment} />
+                <Chip label="Score" value={`${activeCall.quality_score}%`} tone={activeCall.quality_score < 75 ? "warn" : "good"} />
               </div>
 
-              <InsightStrip analysis={analysis} />
+              <div className="status-editor">
+                <select
+                  disabled={isWorking}
+                  onChange={(event) => void updateStatus(event.target.value as CaseStatus)}
+                  value={activeCall.status}
+                >
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>{statusLabels[status]}</option>
+                  ))}
+                </select>
+                <input
+                  onChange={(event) => setStatusNote(event.target.value)}
+                  placeholder="Status izohi"
+                  value={statusNote}
+                />
+              </div>
 
-              <div className="signal-bar" aria-label="Mijoz signallari">
-                {signalItems.map((item) => (
-                  <div key={item.label}>
-                    <span>{item.label}</span>
-                    <strong>{item.value}</strong>
+              <div className="transcript-box">
+                {activeCall.transcript.length ? activeCall.transcript.map((line) => (
+                  <div className={`transcript-line ${line.speaker}`} key={`${line.at}-${line.text}`}>
+                    <span>{speakerLabels[line.speaker]}</span>
+                    <p>{line.text}</p>
                   </div>
-                ))}
+                )) : <p className="empty-text">Transcript hali yo'q.</p>}
               </div>
 
-              <div className="analysis-summary">
-                <div className="section-label">Mijoz holati</div>
-                <p>{analysis.customer_summary}</p>
+              <div className="message-compose">
+                <select onChange={(event) => setSpeaker(event.target.value as CrmSpeaker)} value={speaker}>
+                  <option value="customer">Mijoz</option>
+                  <option value="agent">Agent</option>
+                  <option value="system">Tizim</option>
+                </select>
+                <textarea onChange={(event) => setMessage(event.target.value)} value={message} />
+                <button disabled={isWorking || !message.trim()} onClick={() => void appendTranscript()} type="button">
+                  <Send size={16} />
+                  Qo'shish
+                </button>
               </div>
 
-              <div className="compact-tags">
-                <Badge label="Kayfiyat" tone={analysis.sentiment} value={sentimentLabels[analysis.sentiment]} />
-                <Badge label="E'tiroz" tone="amber" value={objectionLabels[analysis.objection]} />
-                <Badge label="Xavf" tone={analysis.risk_level === "high" ? "negative" : "blue"} value={riskLabels[analysis.risk_level]} />
+              <div className="action-row">
+                <button disabled={isWorking} onClick={() => void createTicket()} type="button">Ticket</button>
+                <button disabled={isWorking} onClick={() => void createLead()} type="button">Lead</button>
+                <button disabled={isWorking} onClick={() => void saveSummary()} type="button">Summary</button>
               </div>
 
-              <div className="opportunity-box">
-                <span>Imkoniyat</span>
-                <p>{analysis.opportunity}</p>
+              <div className="split-block">
+                <MiniList title="Ticketlar" items={activeCall.tickets.map(formatTicket)} />
+                <MiniList title="Leadlar" items={activeCall.leads.map(formatLead)} />
               </div>
 
-              <ListBlock icon={ClipboardList} title="Ehtiyojlar" items={analysis.customer_needs} />
-
-              <ProductReferenceList references={analysis.product_references} />
-
-              <BankFocus intent={analysis.intent} />
+              {summary ? (
+                <div className="summary-card">
+                  <strong>CRM xulosa</strong>
+                  <p>{summary.summary}</p>
+                  <small>{summary.crm_note}</small>
+                </div>
+              ) : null}
             </>
           ) : (
             <div className="empty-state">
-              <ClipboardList size={30} />
-              <p>Mijoz matnini kiriting yoki demo holat tanlang.</p>
+              <PhoneCall size={24} />
+              <p>CRM case ochish uchun mijoz tanlab, yangi call yarating.</p>
             </div>
           )}
         </section>
-      </section>
-
-      <section className="panel support-panel">
-        <div className="tab-list" role="tablist" aria-label="Qo'llab-quvvatlash ma'lumotlari">
-          <TabButton active={activeSupportTab === "script"} label="Javob" name="script" onClick={() => setActiveSupportTab("script")} />
-          <TabButton
-            active={activeSupportTab === "compliance"}
-            label="Nazorat"
-            name="compliance"
-            onClick={() => setActiveSupportTab("compliance")}
-          />
-          <TabButton active={activeSupportTab === "crm"} label="CRM" name="crm" onClick={() => setActiveSupportTab("crm")} />
-          <TabButton
-            active={activeSupportTab === "transcript"}
-            label="Muloqot"
-            name="transcript"
-            onClick={() => setActiveSupportTab("transcript")}
-          />
-        </div>
-
-        <div
-          aria-labelledby={`support-tab-${activeSupportTab}`}
-          className="tab-panel"
-          id={`support-panel-${activeSupportTab}`}
-          role="tabpanel"
-        >
-          {activeSupportTab === "script" && (
-            <ScriptTab
-              analysis={analysis}
-              isSynthesizing={isSynthesizing}
-              onSynthesize={synthesizeSuggestion}
-              scriptLines={scriptLines}
-              ttsResult={ttsResult}
-            />
-          )}
-          {activeSupportTab === "compliance" &&
-            (compliance ? (
-              <CompliancePanel compliance={compliance} evidence={complianceEvidence} />
-            ) : (
-              <EmptyCompliance />
-            ))}
-          {activeSupportTab === "crm" && (
-            <CrmTab analysis={analysis} copied={copied} copyBrief={copyBrief} summary={summary} />
-          )}
-          {activeSupportTab === "transcript" && <TranscriptTab transcript={transcript} />}
-        </div>
       </section>
     </main>
   );
 }
 
-function InsightStrip({ analysis }: { analysis: AnalysisResponse }) {
-  const confidence = `${Math.round(analysis.confidence * 100)}%`;
-  const signals = analysis.matched_signals.slice(0, 4);
-
+function Metric({ icon: Icon, label, value }: { icon: typeof Clock3; label: string; value: string }) {
   return (
-    <div className="insight-strip" aria-label="AI tahlil signallari">
-      <div className="insight-token">
-        <Gauge size={15} />
-        <span>{analysisModeLabels[analysis.analysis_mode]}</span>
-      </div>
-      <div className="insight-token">
-        <ShieldCheck size={15} />
-        <span>Ishonch {confidence}</span>
-      </div>
-      {signals.map((signal) => (
-        <div className="insight-token muted" key={signal}>
-          <span>{signal}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ProductReferenceList({ references }: { references: ProductReference[] }) {
-  if (references.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="product-reference-section">
-      <div className="section-label with-icon">
-        <Database size={15} />
-        SQB dalil kartalari
-      </div>
-      <div className="product-reference-grid">
-        {references.map((reference) => (
-          <article className="product-reference-card" key={reference.id}>
-            <div className="product-reference-head">
-              <strong>{reference.title}</strong>
-              <span className={reference.verified ? "verified-pill" : "verified-pill fallback"}>
-                {reference.verified ? "Tasdiqlangan" : "Fallback"}
-              </span>
-            </div>
-            <p>{reference.why_it_matters}</p>
-            <small>{reference.script_anchor}</small>
-          </article>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function BankFocus({ intent }: { intent: Intent }) {
-  return (
-    <div className="bank-focus">
-      <div className="section-label">SQB yo'nalishi</div>
-      <div className="tag-row">
-        {sqbFocusByIntent[intent].map((item) => (
-          <span key={item}>{item}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TabButton({
-  active,
-  label,
-  name,
-  onClick
-}: {
-  active: boolean;
-  label: string;
-  name: SupportTab;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      aria-controls={`support-panel-${name}`}
-      aria-selected={active}
-      className={active ? "tab-button active" : "tab-button"}
-      id={`support-tab-${name}`}
-      onClick={onClick}
-      role="tab"
-      tabIndex={0}
-      type="button"
-    >
-      {label}
-    </button>
-  );
-}
-
-function ScriptTab({
-  analysis,
-  isSynthesizing,
-  onSynthesize,
-  scriptLines,
-  ttsResult
-}: {
-  analysis: AnalysisResponse | null;
-  isSynthesizing: boolean;
-  onSynthesize: () => Promise<void>;
-  scriptLines: string[];
-  ttsResult: TtsResponse | null;
-}) {
-  if (scriptLines.length === 0) {
-    return (
-      <div className="empty-state compact">
-        <p>Tahlildan keyin operator aytadigan tayyor gaplar shu yerda chiqadi.</p>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <div className="script-list">
-        {scriptLines.map((line, index) => (
-          <div className={index === 0 ? "script-line primary" : "script-line"} key={`${line}-${index}`}>
-            <span>{index + 1}</span>
-            <p>{line}</p>
-          </div>
-        ))}
-      </div>
-
-      <button className="icon-button" disabled={isSynthesizing} onClick={() => void onSynthesize()} type="button">
-        <PlayCircle size={17} />
-        {isSynthesizing ? "Ovoz tayyorlanmoqda..." : "Javobni ovozga aylantirish"}
-      </button>
-
-      {ttsResult && (
-        <div className="tts-output">
-          <span>{ttsResult.message}</span>
-          {ttsResult.audio_url && <audio controls src={ttsResult.audio_url} />}
-        </div>
-      )}
-
-      <ListBlock icon={ClipboardList} title="Aniqlashtiruvchi savollar" items={analysis?.follow_up_questions ?? []} />
-
-      {analysis?.closing_line && (
-        <div className="closing-line">
-          <span>Yakuniy gap</span>
-          <strong>{analysis.closing_line}</strong>
-        </div>
-      )}
-
-      <ListBlock icon={AlertTriangle} title="Aytmaslik kerak" items={analysis?.do_not_say ?? []} />
-    </>
-  );
-}
-
-function CrmTab({
-  analysis,
-  copied,
-  copyBrief,
-  summary
-}: {
-  analysis: AnalysisResponse | null;
-  copied: boolean;
-  copyBrief: () => Promise<void>;
-  summary: CallSummaryResponse | null;
-}) {
-  if (!analysis && !summary) {
-    return (
-      <div className="empty-state compact">
-        <p>CRM yozuv va qo'ng'iroq xulosasi tahlildan keyin chiqadi.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="crm-grid">
-      {analysis && (
-        <div className="battlecard">
-          <div className="battlecard-head">
-            <div>
-              <span>CRM yozuv</span>
-              <strong>{priorityLabels[analysis.priority]} holat</strong>
-            </div>
-            <button className="copy-button" onClick={() => void copyBrief()} type="button">
-              <Copy size={15} />
-              {copied ? "Nusxalandi" : "CRM matn"}
-            </button>
-          </div>
-
-          <div className="battlecard-grid">
-            <div>
-              <span>Qiziqish</span>
-              <strong>{temperatureLabels[analysis.lead_temperature]}</strong>
-            </div>
-            <div>
-              <span>Keyingi yo'l</span>
-              <strong>{analysis.handoff_recommendation}</strong>
-            </div>
-          </div>
-
-          <div className="tag-row">
-            {analysis.crm_tags.map((tag) => (
-              <span key={tag}>{tag}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {analysis?.escalation_packet?.should_escalate && (
-        <div className="escalation-card">
-          <div className="section-label">Supervisorga uzatish</div>
-          <strong>{analysis.escalation_packet.owner} | {priorityLabels[analysis.escalation_packet.urgency]}</strong>
-          <p>{analysis.escalation_packet.reason}</p>
-          <p>{analysis.escalation_packet.handoff_note}</p>
-          {analysis.escalation_packet.transcript_excerpt && <small>{analysis.escalation_packet.transcript_excerpt}</small>}
-        </div>
-      )}
-
-      {summary && (
-        <div className="summary-card">
-          <h2>CRM uchun xulosa</h2>
-          <p>{summary.summary}</p>
-          <div>
-            <span>CRM qayd</span>
-            <strong>{summary.crm_note}</strong>
-          </div>
-          <div>
-            <span>Keyingi qadam</span>
-            <strong>{summary.recommended_next_step}</strong>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TranscriptTab({ transcript }: { transcript: SpeakerLine[] }) {
-  return (
-    <div className="transcript-box in-tab">
-      {transcript.map((line, index) => (
-        <div className="transcript-line" key={`${line.speaker}-${index}`}>
-          <span>{line.speaker === "customer" ? "Mijoz" : "Operator"}</span>
-          <p>{line.text}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Badge({ label, value, tone }: { label: string; value: string; tone: Sentiment | "blue" | "amber" }) {
-  return (
-    <div className={`analysis-badge ${tone}`}>
+    <div className="metric-card">
+      <Icon size={18} />
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
   );
 }
 
-function ListBlock({
-  icon: Icon,
-  title,
-  items
-}: {
-  icon: LucideIcon;
-  title: string;
-  items: string[];
-}) {
-  if (items.length === 0) {
-    return null;
-  }
-
+function PanelTitle({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <div className="list-block">
-      <div className="section-label with-icon">
-        <Icon size={15} />
-        {title}
+    <div className="panel-title">
+      <div>
+        <h2>{title}</h2>
+        <p>{subtitle}</p>
       </div>
-      <ul>
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
     </div>
   );
 }
 
-function CompliancePanel({
-  compliance,
-  evidence
-}: {
-  compliance: ComplianceResult;
-  evidence: ComplianceEvidence[];
-}) {
+function Chip({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "warn" | "danger" }) {
   return (
-    <>
-      <div className="panel-heading">
-        <ShieldCheck size={20} />
-        <h2>Bank talablari</h2>
-      </div>
-
-      <div className="compliance-head">
-        <div>
-          <span>Holat</span>
-          <strong>{compliance.score}%</strong>
-        </div>
-        <StatusDot status={compliance.status} />
-      </div>
-
-      <div className="progress-track">
-        <div className={`progress-fill ${compliance.status}`} style={{ width: `${compliance.score}%` }} />
-      </div>
-
-      <div className="check-list">
-        {compliance.missing_items.length > 0 ? (
-          compliance.missing_items.map((item) => (
-            <div className="check-item" key={item}>
-              <AlertTriangle size={16} />
-              <span>{item}</span>
-            </div>
-          ))
-        ) : (
-          <div className="check-item ok">
-            <BadgeCheck size={16} />
-            <span>Majburiy bandlar yopilgan</span>
-          </div>
-        )}
-      </div>
-
-      {compliance.suggested_phrases.length > 0 && (
-        <div className="phrase-list">
-          <div className="section-label">Majburiy gaplar</div>
-          {compliance.suggested_phrases.map((phrase) => (
-            <p key={phrase}>{phrase}</p>
-          ))}
-        </div>
-      )}
-
-      {evidence.length > 0 && (
-        <div className="evidence-list">
-          <div className="section-label">Nazorat izohlari</div>
-          {evidence.map((item) => (
-            <div className={`evidence-item ${item.status}`} key={item.id}>
-              <div className="evidence-meta">
-                <span>{item.speaker === "agent" ? "Operator" : item.speaker === "customer" ? "Mijoz" : "Tizim"}</span>
-                {item.line_index !== null && <span>Qator {item.line_index + 1}</span>}
-                <span>{item.severity}</span>
-              </div>
-              <div>
-                <strong>{item.finding}</strong>
-                {item.score_impact > 0 && <span>Ballga ta'siri: -{item.score_impact}</span>}
-              </div>
-              {item.safer_phrase && <p>{item.safer_phrase}</p>}
-            </div>
-          ))}
-        </div>
-      )}
-    </>
+    <span className={`chip ${tone}`}>
+      <small>{label}</small>
+      <b>{value}</b>
+    </span>
   );
 }
 
-function EmptyCompliance() {
+function MiniList({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="empty-state compact">
-      <ShieldCheck size={28} />
-      <p>Bank talablari tahlildan keyin chiqadi.</p>
+    <div className="mini-list">
+      <h3>{title}</h3>
+      {items.length ? items.map((item) => <p key={item}>{item}</p>) : <p className="empty-text">Hali yo'q.</p>}
     </div>
   );
 }
 
-function StatusDot({ status }: { status: ComplianceStatus }) {
-  return <span aria-label={`Nazorat holati: ${complianceStatusLabels[status]}`} className={`status-dot ${status}`} role="img" />;
+function formatTicket(ticket: Ticket) {
+  return `${ticket.id} · ${ticket.department} · ${statusLabels[ticket.status]}`;
 }
 
-function getErrorMessage(caught: unknown): string {
-  return caught instanceof Error ? caught.message : "Noma'lum xatolik yuz berdi.";
+function formatLead(lead: Lead) {
+  return `${lead.id} · ${lead.product_type} · ${lead.score}%`;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Noma'lum xatolik";
 }
 
 export default App;
