@@ -95,6 +95,7 @@ function ManagerLogin({ onSuccess }: { onSuccess: () => void }) {
         <h2>SQB Manager Console</h2>
         <p>Parolni kiriting (faqat menedjerlar uchun)</p>
         <input
+          aria-label="Manager paroli"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -105,9 +106,6 @@ function ManagerLogin({ onSuccess }: { onSuccess: () => void }) {
         <button type="submit" disabled={loading || !password}>
           {loading ? "Tekshirilmoqda..." : "Kirish"}
         </button>
-        <small style={{ textAlign: "center", color: "#94a3b8" }}>
-          Demo parol: <code>sqb2026</code>
-        </small>
       </form>
     </main>
   );
@@ -161,7 +159,7 @@ function ManagerDashboard({ onLogout }: { onLogout: () => void }) {
           <p className="eyebrow">SQB Manager Console</p>
           <h1>Jonli kuzatuv paneli</h1>
         </div>
-        <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
+        <div className="manager-header-actions">
           <div className="manager-stats">
             <div>
               <Users size={18} />
@@ -266,21 +264,31 @@ function SessionDrawer({
     };
   }, [cardId]);
 
-  if (!detail) return null;
-
   return (
-    <aside className="drawer" onClick={onClose}>
+    <aside
+      aria-labelledby="session-drawer-title"
+      aria-modal="true"
+      className="drawer"
+      onClick={onClose}
+      role="dialog"
+    >
       <div className="drawer-panel" onClick={(e) => e.stopPropagation()}>
         <header>
-          <h3>
-            {detail.operator.name} ↔ {detail.customer_label}
+          <h3 id="session-drawer-title">
+            {detail ? `${detail.operator.name} - ${detail.customer_label}` : "Sessiya yuklanmoqda"}
           </h3>
-          <button type="button" onClick={onClose}>
-            ✕
+          <button aria-label="Drawerni yopish" type="button" onClick={onClose}>
+            x
           </button>
         </header>
 
-        {detail.last_analysis && (
+        {!detail && (
+          <div className="drawer-loading" role="status">
+            Sessiya ma'lumotlari yuklanmoqda...
+          </div>
+        )}
+
+        {detail?.last_analysis && (
           <section className="drawer-summary">
             <span className={`risk-badge risk-badge--${detail.risk_level}`}>
               {detail.priority}
@@ -295,26 +303,30 @@ function SessionDrawer({
           </section>
         )}
 
-        <section className="drawer-transcript">
-          {detail.transcript.map((line, i) => (
-            <div key={i} className={`bubble bubble--${line.speaker}`}>
-              <span>{line.speaker === "customer" ? "Mijoz" : "Operator"}</span>
-              <p>{line.text}</p>
-            </div>
-          ))}
-        </section>
+        {detail && (
+          <>
+            <section className="drawer-transcript">
+              {detail.transcript.map((line, i) => (
+                <div key={`${line.speaker}-${i}`} className={`bubble bubble--${line.speaker}`}>
+                  <span>{line.speaker === "customer" ? "Mijoz" : "Operator"}</span>
+                  <p>{line.text}</p>
+                </div>
+              ))}
+            </section>
 
-        <footer>
-          <button
-            type="button"
-            onClick={async () => {
-              await apiPostManager(`/api/manager/sessions/${cardId}/close`, {});
-              onClose();
-            }}
-          >
-            Yopish
-          </button>
-        </footer>
+            <footer>
+              <button
+                type="button"
+                onClick={async () => {
+                  await apiPostManager(`/api/manager/sessions/${cardId}/close`, {});
+                  onClose();
+                }}
+              >
+                Yopish
+              </button>
+            </footer>
+          </>
+        )}
       </div>
     </aside>
   );

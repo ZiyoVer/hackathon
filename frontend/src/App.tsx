@@ -3,8 +3,10 @@ import {
   BadgeCheck,
   ClipboardList,
   Copy,
+  Database,
   FileAudio,
   FileText,
+  Gauge,
   Mic,
   PlayCircle,
   Send,
@@ -25,6 +27,7 @@ import type {
   DemoScenario,
   Intent,
   Objection,
+  ProductReference,
   Sentiment,
   SpeakerLine,
   TtsResponse
@@ -81,6 +84,17 @@ const temperatureLabels: Record<AnalysisResponse["lead_temperature"], string> = 
   hot: "Issiq"
 };
 
+const analysisModeLabels: Record<AnalysisResponse["analysis_mode"], string> = {
+  rules: "Rules fallback",
+  openai: "OpenAI"
+};
+
+const complianceStatusLabels: Record<ComplianceStatus, string> = {
+  green: "Yashil",
+  yellow: "Sariq",
+  red: "Qizil"
+};
+
 const sqbFocusByIntent: Record<Intent, string[]> = {
   credit_request: ["Kredit", "Kredit karta", "SQB Mobile"],
   card_opening: ["Bank kartalari", "Kredit karta", "SQB Mobile"],
@@ -107,6 +121,7 @@ function App() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [isScenarioLoading, setIsScenarioLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<"operator" | "manager">(() =>
     typeof window !== "undefined" && window.location.hash === "#manager" ? "manager" : "operator",
@@ -157,7 +172,8 @@ function App() {
           setActiveScenarioId(data[0].id);
         }
       })
-      .catch((caught: unknown) => setError(getErrorMessage(caught)));
+      .catch((caught: unknown) => setError(getErrorMessage(caught)))
+      .finally(() => setIsScenarioLoading(false));
   }, []);
 
   const signalItems = useMemo(() => {
@@ -202,12 +218,17 @@ function App() {
     }
   };
 
-  const analyzeText = async (value = message) => {
+  const analyzeText = async (
+    value = message,
+    options: { appendToTranscript?: boolean; pushSession?: boolean } = {},
+  ) => {
     if (!value.trim()) {
       setError("Tahlil qilish uchun mijoz matnini kiriting.");
       return;
     }
 
+    const appendToTranscript = options.appendToTranscript ?? true;
+    const pushSession = options.pushSession ?? true;
     setIsAnalyzing(true);
     setError("");
     setTtsResult(null);
@@ -216,7 +237,18 @@ function App() {
         message: value
       });
       setAnalysis(result);
-      void pushToSession(value, "customer");
+      if (appendToTranscript) {
+        setTranscript((previous) => {
+          const last = previous[previous.length - 1];
+          if (last?.speaker === "customer" && last.text === value) {
+            return previous;
+          }
+          return [...previous, { speaker: "customer", text: value }];
+        });
+      }
+      if (pushSession) {
+        void pushToSession(value, "customer");
+      }
     } catch (caught: unknown) {
       setError(getErrorMessage(caught));
     } finally {
@@ -266,7 +298,7 @@ function App() {
     setSummary(null);
     setAudioResult(null);
     setTtsResult(null);
-    void analyzeText(scenario.customer_message);
+    void analyzeText(scenario.customer_message, { appendToTranscript: false });
   };
 
   const handleScenarioChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -290,7 +322,7 @@ function App() {
       setAudioResult(result);
       setMessage(result.transcript);
       setTranscript((previous) => [...previous, { speaker: "customer", text: result.transcript }]);
-      void analyzeText(result.transcript);
+      void analyzeText(result.transcript, { appendToTranscript: false });
     } catch (caught: unknown) {
       setError(getErrorMessage(caught));
     } finally {
@@ -310,7 +342,7 @@ function App() {
           <p className="eyebrow">SQB Bank aloqa markazi</p>
           <h1>SQB mijoz tahlili</h1>
         </div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div className="topbar-actions">
           <button
             className="mode-toggle"
             type="button"
@@ -343,7 +375,8 @@ function App() {
 
           <div className="input-toolbar">
             <label htmlFor="scenario-select">Demo holat</label>
-            <select id="scenario-select" onChange={handleScenarioChange} value={activeScenarioId}>
+            <select disabled={isScenarioLoading} id="scenario-select" onChange={handleScenarioChange} value={activeScenarioId}>
+              {isScenarioLoading && <option>Demo holatlar yuklanmoqda</option>}
               {scenarios.map((scenario) => (
                 <option key={scenario.id} value={scenario.id}>
                   {scenario.title}
@@ -400,6 +433,8 @@ function App() {
                 <p>{analysis.next_best_action}</p>
               </div>
 
+              <InsightStrip analysis={analysis} />
+
               <div className="signal-bar" aria-label="Mijoz signallari">
                 {signalItems.map((item) => (
                   <div key={item.label}>
@@ -427,6 +462,8 @@ function App() {
 
               <ListBlock icon={ClipboardList} title="Ehtiyojlar" items={analysis.customer_needs} />
 
+              <ProductReferenceList references={analysis.product_references} />
+
               <BankFocus intent={analysis.intent} />
             </>
           ) : (
@@ -440,21 +477,28 @@ function App() {
 
       <section className="panel support-panel">
         <div className="tab-list" role="tablist" aria-label="Qo'llab-quvvatlash ma'lumotlari">
-          <TabButton active={activeSupportTab === "script"} label="Javob" onClick={() => setActiveSupportTab("script")} />
+          <TabButton active={activeSupportTab === "script"} label="Javob" name="script" onClick={() => setActiveSupportTab("script")} />
           <TabButton
             active={activeSupportTab === "compliance"}
             label="Nazorat"
+            name="compliance"
             onClick={() => setActiveSupportTab("compliance")}
           />
-          <TabButton active={activeSupportTab === "crm"} label="CRM" onClick={() => setActiveSupportTab("crm")} />
+          <TabButton active={activeSupportTab === "crm"} label="CRM" name="crm" onClick={() => setActiveSupportTab("crm")} />
           <TabButton
             active={activeSupportTab === "transcript"}
             label="Muloqot"
+            name="transcript"
             onClick={() => setActiveSupportTab("transcript")}
           />
         </div>
 
-        <div className="tab-panel">
+        <div
+          aria-labelledby={`support-tab-${activeSupportTab}`}
+          className="tab-panel"
+          id={`support-panel-${activeSupportTab}`}
+          role="tabpanel"
+        >
           {activeSupportTab === "script" && (
             <ScriptTab
               analysis={analysis}
@@ -480,6 +524,58 @@ function App() {
   );
 }
 
+function InsightStrip({ analysis }: { analysis: AnalysisResponse }) {
+  const confidence = `${Math.round(analysis.confidence * 100)}%`;
+  const signals = analysis.matched_signals.slice(0, 4);
+
+  return (
+    <div className="insight-strip" aria-label="AI tahlil signallari">
+      <div className="insight-token">
+        <Gauge size={15} />
+        <span>{analysisModeLabels[analysis.analysis_mode]}</span>
+      </div>
+      <div className="insight-token">
+        <ShieldCheck size={15} />
+        <span>Ishonch {confidence}</span>
+      </div>
+      {signals.map((signal) => (
+        <div className="insight-token muted" key={signal}>
+          <span>{signal}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProductReferenceList({ references }: { references: ProductReference[] }) {
+  if (references.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="product-reference-section">
+      <div className="section-label with-icon">
+        <Database size={15} />
+        SQB dalil kartalari
+      </div>
+      <div className="product-reference-grid">
+        {references.map((reference) => (
+          <article className="product-reference-card" key={reference.id}>
+            <div className="product-reference-head">
+              <strong>{reference.title}</strong>
+              <span className={reference.verified ? "verified-pill" : "verified-pill fallback"}>
+                {reference.verified ? "Tasdiqlangan" : "Fallback"}
+              </span>
+            </div>
+            <p>{reference.why_it_matters}</p>
+            <small>{reference.script_anchor}</small>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BankFocus({ intent }: { intent: Intent }) {
   return (
     <div className="bank-focus">
@@ -493,9 +589,28 @@ function BankFocus({ intent }: { intent: Intent }) {
   );
 }
 
-function TabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+function TabButton({
+  active,
+  label,
+  name,
+  onClick
+}: {
+  active: boolean;
+  label: string;
+  name: SupportTab;
+  onClick: () => void;
+}) {
   return (
-    <button aria-selected={active} className={active ? "tab-button active" : "tab-button"} onClick={onClick} role="tab" type="button">
+    <button
+      aria-controls={`support-panel-${name}`}
+      aria-selected={active}
+      className={active ? "tab-button active" : "tab-button"}
+      id={`support-tab-${name}`}
+      onClick={onClick}
+      role="tab"
+      tabIndex={0}
+      type="button"
+    >
       {label}
     </button>
   );
@@ -746,6 +861,11 @@ function CompliancePanel({
           <div className="section-label">Nazorat izohlari</div>
           {evidence.map((item) => (
             <div className={`evidence-item ${item.status}`} key={item.id}>
+              <div className="evidence-meta">
+                <span>{item.speaker === "agent" ? "Operator" : item.speaker === "customer" ? "Mijoz" : "Tizim"}</span>
+                {item.line_index !== null && <span>Qator {item.line_index + 1}</span>}
+                <span>{item.severity}</span>
+              </div>
               <div>
                 <strong>{item.finding}</strong>
                 {item.score_impact > 0 && <span>Ballga ta'siri: -{item.score_impact}</span>}
@@ -769,7 +889,7 @@ function EmptyCompliance() {
 }
 
 function StatusDot({ status }: { status: ComplianceStatus }) {
-  return <span className={`status-dot ${status}`} />;
+  return <span aria-label={`Nazorat holati: ${complianceStatusLabels[status]}`} className={`status-dot ${status}`} role="img" />;
 }
 
 function getErrorMessage(caught: unknown): string {
