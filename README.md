@@ -1,143 +1,69 @@
-# Bank AI Call Center
+# AI Call Center Prototype
 
-Hackathon MVP: bank call-center uchun ikki rejimli AI platforma.
+**A hackathon prototype combining an operator copilot, a voice agent, and a demo CRM.**
 
-- **Operator Copilot**: transcript, intent, next-best-offer, KYC/AML checklist, compliance guardrail.
-- **AI Call Agent**: Twilio telefon qo'ng'irog'i orqali mijoz bilan o'zi gaplashadi va CRM status/ticket/lead yaratadi.
-- **CRM layer**: demo in-memory CRM, optional Bitrix24 webhook sync.
+The project explores how call-center software can connect conversation analysis, live audio, and follow-up workflows in one interface.
+
+[Original Uzbek setup guide](docs/README.uz.md) · [Backend](backend/src) · [Web frontend](frontend) · [Desktop application](apps/desktop)
+
+## Two interaction modes
+
+- **Operator copilot:** transcript analysis, intent and objection detection, suggested next steps, and checklist-style prompts.
+- **Voice agent:** a Twilio Media Streams connection to Gemini Live, with CRM ticket and status workflows.
+
+The application includes an in-memory demo CRM and an optional Bitrix24 integration.
+
+## Architecture
+
+```text
+Web / desktop interface → Express API → analysis + demo CRM
+                               ↕
+                    Twilio audio ↔ Gemini Live
+                               ↓
+                     Optional Bitrix24 sync
+```
 
 ## Stack
 
-- Frontend: React + Vite + TypeScript
-- Backend: Node.js + Express + TypeScript + WebSocket
-- Voice: Gemini Live API + Twilio Media Streams
-- CRM: demo CRM, Bitrix24 webhook adapter
-- Deploy: Railway Dockerfile
+**TypeScript · React · Vite · Node.js · Express · WebSockets · Gemini Live · Twilio**
 
-## Local ishga tushirish
+## Run the web prototype
 
-Cluely-style desktop overlay:
+```bash
+git clone https://github.com/ZiyoVer/hackathon.git
+cd hackathon
+cp .env.example .env
+npm --prefix backend ci
+npm --prefix frontend ci
+```
+
+Start the API and frontend in separate terminals:
+
+```bash
+npm run dev:api
+```
+
+```bash
+npm run dev:web
+```
+
+- Web: `http://localhost:5173`
+- API: `http://localhost:8080`
+- Health: `http://localhost:8080/health`
+
+For the optional desktop interface:
 
 ```bash
 npm --prefix apps/desktop install
 npm run dev:desktop
 ```
 
-Overlay backenddan real tahlil olishi uchun alohida terminalda API ham ishlasin:
+Real phone calls require your own Gemini/Twilio credentials and a public HTTPS/WSS backend. See the [original setup guide](docs/README.uz.md) for webhook details.
 
-```bash
-cp .env.example .env
-npm --prefix backend install
-npm run dev:api
-```
+## Prototype boundaries
 
-Eski web CRM/demo sahifasi alohida:
+The transcript analyzer in [analyzer.ts](backend/src/services/analyzer.ts) uses **rule-based matching**, not a trained sentiment or compliance model. Its labels and scores are demo heuristics. The voice path uses the separate Gemini Live integration.
 
-```bash
-npm --prefix frontend install
-npm run dev:web
-```
+This is a hackathon MVP, not a validated banking decision system. Demo CRM data is stored in memory. Authentication defaults, data persistence, and deployment controls need review before any production use.
 
-URL:
-
-- Desktop overlay: `npm run dev:desktop`
-- Web: `http://localhost:5173`
-- API: `http://localhost:8080`
-- Health: `http://localhost:8080/health`
-
-## Telefon demo
-
-Twilio telefon qo'ng'irog'i uchun backend public HTTPS/WSS URLda turishi kerak.
-Localda eng tez yo'l:
-
-```bash
-ngrok http 8080
-```
-
-`.env`:
-
-```env
-PUBLIC_BASE_URL="https://YOUR-NGROK.ngrok-free.app"
-PUBLIC_WS_BASE_URL="wss://YOUR-NGROK.ngrok-free.app"
-GEMINI_API_KEY="..."
-TWILIO_ACCOUNT_SID="..."
-TWILIO_AUTH_TOKEN="..."
-TWILIO_FROM_NUMBER="+1..."
-VOICE_WEBHOOK_SECRET="random-demo-secret"
-VOICE_STREAM_SECRET="another-random-demo-secret"
-```
-
-Twilio Console ichida telefon raqamining Voice webhook URLini shunday qo'ying:
-
-```text
-https://YOUR-NGROK.ngrok-free.app/api/voice/twilio?customerId=cust_001&secret=random-demo-secret
-```
-
-Keyin telefoningizdan Twilio raqamiga qo'ng'iroq qiling. Twilio audio streamni:
-
-```text
-wss://YOUR-NGROK.ngrok-free.app/api/voice/twilio/stream
-```
-
-endpointga yuboradi, backend esa Gemini Live bilan real-time agentni ulaydi.
-
-## Muhim endpointlar
-
-- `GET /api/demo-scenarios`
-- `POST /api/analyze-message`
-- `POST /api/analyze-call`
-- `POST /api/agent/outbound-call`
-- `POST /api/voice/twilio`
-- `WS /api/voice/twilio/stream`
-- `GET /api/crm/customers`
-- `GET /api/crm/calls`
-- `PATCH /api/crm/calls/:callId/status`
-- `POST /api/crm/calls/:callId/tickets`
-- `POST /api/crm/calls/:callId/summary`
-
-## API keylar qayerdan olinadi
-
-API keylarni kodga yozmang va GitHubga commit qilmang. `.env`, Railway Variables yoki secret manager ishlating.
-
-### Gemini
-
-1. `https://aistudio.google.com/app/apikey` ga kiring.
-2. Google Cloud project tanlang yoki yangisini yarating.
-3. API key yarating.
-4. `.env` ichiga `GEMINI_API_KEY` sifatida yozing.
-
-Production/privacy uchun Vertex AI tarafida billing, IAM va data governance bilan ishlatish kerak.
-
-### Twilio
-
-1. `https://console.twilio.com` da account oching.
-2. Voice-capable raqam sotib oling.
-3. Console dashboarddan `Account SID` va `Auth Token` oling.
-4. Raqamni `.env`dagi `TWILIO_FROM_NUMBER`ga yozing.
-5. Inbound webhook URL: `/api/voice/twilio`.
-
-Trial accountda outbound call uchun chaqiriladigan telefon raqami verified bo'lishi mumkin.
-
-### Bitrix24 optional
-
-1. Bitrix24: `Applications -> Developer resources -> Other -> Incoming webhook`.
-2. CRM va Tasks permission bering.
-3. Webhook base URLni `.env`dagi `BITRIX24_WEBHOOK_URL`ga yozing.
-
-Misol:
-
-```env
-BITRIX24_WEBHOOK_URL="https://yourcompany.bitrix24.com/rest/1/secret"
-```
-
-Backend ticket yaratganda `crm.lead.add`, status update bo'lganda `tasks.task.add` chaqiradi.
-
-## Demo pitch
-
-Bankka ko'rsatadigan asosiy ssenariy:
-
-1. Mijoz kredit foizi qimmatligini aytadi.
-2. Copilot 2 soniya ichida intent, e'tiroz, next-best-offer chiqaradi.
-3. Operator noto'g'ri va'da bersa compliance guardrail ushlaydi.
-4. KYC savoli qolib ketsa checklist alert beradi.
-5. AI Call Agent telefon orqali shikoyatni qabul qiladi, CRM ticket ochadi va statusni `in_progress` qiladi.
+**Author:** [O'ktam Ziyodullayev](https://github.com/ZiyoVer)
